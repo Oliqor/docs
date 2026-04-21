@@ -11,7 +11,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Loader2, MessageCircleIcon, RefreshCw, SearchIcon, Send, X } from 'lucide-react';
+import { Bot, Loader2, RefreshCw, SearchIcon, Send, Sparkles, Square, X } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import { buttonVariants } from '../ui/button';
 import { useChat, type UseChatHelpers } from '@ai-sdk/react';
@@ -26,41 +26,51 @@ const Context = createContext<{
   chat: UseChatHelpers<ChatUIMessage>;
 } | null>(null);
 
+// ─── Header ──────────────────────────────────────────────────────────────────
+
 export function AISearchPanelHeader({ className, ...props }: ComponentProps<'div'>) {
   const { setOpen } = useAISearchContext();
 
   return (
     <div
       className={cn(
-        'sticky top-0 flex items-start gap-2 border rounded-xl bg-fd-secondary text-fd-secondary-foreground shadow-sm',
+        'flex items-center gap-3 px-4 py-3 border-b border-fd-border shrink-0',
         className,
       )}
       {...props}
     >
-      <div className="px-3 py-2 flex-1">
-        <p className="text-sm font-medium mb-2">AI Chat</p>
-        <p className="text-xs text-fd-muted-foreground">
-          AI can be inaccurate, please verify the answers.
+      <div className="flex items-center justify-center size-7 rounded-lg bg-fd-primary/15 text-fd-primary shrink-0">
+        <Sparkles size={14} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold leading-none">Oliqor AI</p>
+        <p className="text-[11px] text-fd-muted-foreground mt-1 leading-none">
+          Answers may be inaccurate — verify before use
         </p>
       </div>
-
-      <button
-        aria-label="Close"
-        tabIndex={-1}
-        className={cn(
-          buttonVariants({
-            size: 'icon-sm',
-            color: 'ghost',
-            className: 'text-fd-muted-foreground rounded-full',
-          }),
-        )}
-        onClick={() => setOpen(false)}
-      >
-        <X />
-      </button>
+      <div className="flex items-center gap-1.5">
+        <kbd className="hidden sm:inline-flex items-center gap-1 rounded border border-fd-border bg-fd-muted px-1.5 py-0.5 text-[10px] text-fd-muted-foreground font-mono">
+          ⌘/
+        </kbd>
+        <button
+          aria-label="Close"
+          className={cn(
+            buttonVariants({
+              size: 'icon-sm',
+              color: 'ghost',
+              className: 'text-fd-muted-foreground rounded-md hover:text-fd-foreground',
+            }),
+          )}
+          onClick={() => setOpen(false)}
+        >
+          <X size={15} />
+        </button>
+      </div>
     </div>
   );
 }
+
+// ─── Input Actions (retry / clear) ───────────────────────────────────────────
 
 export function AISearchInputActions() {
   const { messages, status, setMessages, regenerate } = useChatContext();
@@ -75,14 +85,14 @@ export function AISearchInputActions() {
           type="button"
           className={cn(
             buttonVariants({
-              color: 'secondary',
+              color: 'ghost',
               size: 'sm',
-              className: 'rounded-full gap-1.5',
+              className: 'rounded-full gap-1.5 text-fd-muted-foreground text-xs h-7',
             }),
           )}
           onClick={() => regenerate()}
         >
-          <RefreshCw className="size-4" />
+          <RefreshCw size={12} />
           Retry
         </button>
       )}
@@ -90,42 +100,37 @@ export function AISearchInputActions() {
         type="button"
         className={cn(
           buttonVariants({
-            color: 'secondary',
+            color: 'ghost',
             size: 'sm',
-            className: 'rounded-full',
+            className: 'rounded-full text-fd-muted-foreground text-xs h-7',
           }),
         )}
         onClick={() => setMessages([])}
       >
-        Clear Chat
+        Clear chat
       </button>
     </>
   );
 }
 
+// ─── Chat Input ───────────────────────────────────────────────────────────────
+
 const StorageKeyInput = '__ai_search_input';
+
 export function AISearchInput(props: ComponentProps<'form'>) {
   const { status, sendMessage, stop } = useChatContext();
   const [input, setInput] = useState(() => localStorage.getItem(StorageKeyInput) ?? '');
   const isLoading = status === 'streaming' || status === 'submitted';
+
   const onStart = (e?: SyntheticEvent) => {
     e?.preventDefault();
     const message = input.trim();
     if (message.length === 0) return;
-
     void sendMessage({
       role: 'user',
       parts: [
-        {
-          type: 'data-client',
-          data: {
-            location: location.href,
-          },
-        },
-        {
-          type: 'text',
-          text: message,
-        },
+        { type: 'data-client', data: { location: location.href } },
+        { type: 'text', text: message },
       ],
     });
     setInput('');
@@ -137,13 +142,16 @@ export function AISearchInput(props: ComponentProps<'form'>) {
   }, [isLoading]);
 
   return (
-    <form {...props} className={cn('flex items-start pe-2', props.className)} onSubmit={onStart}>
-      <Input
+    <form
+      {...props}
+      className={cn('flex items-end gap-2 p-3', props.className)}
+      onSubmit={onStart}
+    >
+      <GrowingTextarea
         value={input}
-        placeholder={isLoading ? 'AI is answering...' : 'Ask a question'}
+        placeholder={isLoading ? 'Answering…' : 'Ask anything…'}
         autoFocus
-        className="p-3"
-        disabled={status === 'streaming' || status === 'submitted'}
+        disabled={isLoading}
         onChange={(e) => {
           setInput(e.target.value);
           localStorage.setItem(StorageKeyInput, e.target.value);
@@ -156,65 +164,67 @@ export function AISearchInput(props: ComponentProps<'form'>) {
       />
       {isLoading ? (
         <button
-          key="bn"
+          key="stop"
           type="button"
-          className={cn(
-            buttonVariants({
-              color: 'secondary',
-              className: 'transition-all rounded-full mt-2 gap-2',
-            }),
-          )}
+          aria-label="Stop"
+          className="shrink-0 flex items-center justify-center size-8 rounded-full bg-fd-primary/10 text-fd-primary hover:bg-fd-primary/20 transition-colors"
           onClick={stop}
         >
-          <Loader2 className="size-4 animate-spin text-fd-muted-foreground" />
-          Abort Answer
+          <Square size={13} className="fill-current" />
         </button>
       ) : (
         <button
-          key="bn"
+          key="send"
           type="submit"
-          className={cn(
-            buttonVariants({
-              color: 'primary',
-              className: 'transition-all rounded-full mt-2',
-            }),
-          )}
-          disabled={input.length === 0}
+          aria-label="Send"
+          disabled={input.trim().length === 0}
+          className="shrink-0 flex items-center justify-center size-8 rounded-full bg-fd-primary text-fd-primary-foreground hover:opacity-90 disabled:opacity-30 transition-all"
         >
-          <Send className="size-4" />
+          <Send size={13} />
         </button>
       )}
     </form>
   );
 }
 
+// ─── Auto-growing textarea ────────────────────────────────────────────────────
+
+function GrowingTextarea(props: ComponentProps<'textarea'>) {
+  const shared = cn('col-start-1 row-start-1 text-sm leading-relaxed', props.className);
+
+  return (
+    <div className="grid flex-1 min-w-0">
+      <textarea
+        id="nd-ai-input"
+        rows={1}
+        {...props}
+        className={cn(
+          'resize-none bg-transparent placeholder:text-fd-muted-foreground focus-visible:outline-none max-h-36 overflow-y-auto',
+          shared,
+        )}
+      />
+      <div className={cn(shared, 'break-all invisible pointer-events-none whitespace-pre-wrap')}>
+        {`${props.value?.toString() ?? ''}\n`}
+      </div>
+    </div>
+  );
+}
+
+// ─── Scrolling message list ───────────────────────────────────────────────────
+
 function List(props: Omit<ComponentProps<'div'>, 'dir'>) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
-    function callback() {
-      const container = containerRef.current;
-      if (!container) return;
-
-      container.scrollTo({
-        top: container.scrollHeight,
-        behavior: 'instant',
-      });
-    }
-
-    const observer = new ResizeObserver(callback);
-    callback();
-
-    const element = containerRef.current?.firstElementChild;
-
-    if (element) {
-      observer.observe(element);
-    }
-
-    return () => {
-      observer.disconnect();
-    };
+    const observer = new ResizeObserver(() => {
+      const el = containerRef.current;
+      if (!el) return;
+      el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
+    });
+    const el = containerRef.current?.firstElementChild;
+    if (el) observer.observe(el);
+    return () => observer.disconnect();
   }, []);
 
   return (
@@ -228,31 +238,7 @@ function List(props: Omit<ComponentProps<'div'>, 'dir'>) {
   );
 }
 
-function Input(props: ComponentProps<'textarea'>) {
-  const ref = useRef<HTMLDivElement>(null);
-  const shared = cn('col-start-1 row-start-1', props.className);
-
-  return (
-    <div className="grid flex-1">
-      <textarea
-        id="nd-ai-input"
-        {...props}
-        className={cn(
-          'resize-none bg-transparent placeholder:text-fd-muted-foreground focus-visible:outline-none',
-          shared,
-        )}
-      />
-      <div ref={ref} className={cn(shared, 'break-all invisible')}>
-        {`${props.value?.toString() ?? ''}\n`}
-      </div>
-    </div>
-  );
-}
-
-const roleName: Record<string, string> = {
-  user: 'you',
-  assistant: 'fumadocs',
-};
+// ─── Message ──────────────────────────────────────────────────────────────────
 
 function Message({ message, ...props }: { message: ChatUIMessage } & ComponentProps<'div'>) {
   let markdown = '';
@@ -263,62 +249,197 @@ function Message({ message, ...props }: { message: ChatUIMessage } & ComponentPr
       markdown += part.text;
       continue;
     }
-
     if (part.type.startsWith('tool-')) {
       const toolName = part.type.slice('tool-'.length);
       const p = part as UIToolInvocation<Tool>;
-
       if (toolName !== 'search' || !p.toolCallId) continue;
       searchCalls.push(p);
     }
   }
 
-  return (
-    <div onClick={(e) => e.stopPropagation()} {...props}>
-      <p
-        className={cn(
-          'mb-1 text-sm font-medium text-fd-muted-foreground',
-          message.role === 'assistant' && 'text-fd-primary',
-        )}
-      >
-        {roleName[message.role] ?? 'unknown'}
-      </p>
-      <div className="prose text-sm">
-        <Markdown text={markdown} />
-      </div>
+  const isUser = message.role === 'user';
 
-      {searchCalls.map((call) => {
-        return (
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      className={cn('flex gap-2.5', isUser && 'flex-row-reverse')}
+      {...props}
+    >
+      {/* Avatar */}
+      {!isUser && (
+        <div className="shrink-0 mt-0.5 flex items-center justify-center size-6 rounded-full bg-fd-primary/15 text-fd-primary">
+          <Bot size={13} />
+        </div>
+      )}
+
+      <div className={cn('flex flex-col gap-1.5 min-w-0', isUser ? 'items-end' : 'items-start flex-1')}>
+        {/* Bubble */}
+        <div
+          className={cn(
+            'rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed',
+            isUser
+              ? 'bg-fd-primary text-fd-primary-foreground rounded-tr-sm max-w-[85%]'
+              : 'bg-fd-muted text-fd-foreground rounded-tl-sm w-full',
+          )}
+        >
+          {isUser ? (
+            <p className="whitespace-pre-wrap">{markdown}</p>
+          ) : (
+            <div className="prose prose-sm max-w-none [&_p:last-child]:mb-0">
+              <Markdown text={markdown} />
+            </div>
+          )}
+        </div>
+
+        {/* Search tool indicators */}
+        {searchCalls.map((call) => (
           <div
             key={call.toolCallId}
-            className="flex flex-row gap-2 items-center mt-3 rounded-lg border bg-fd-secondary text-fd-muted-foreground text-xs p-2"
+            className="flex items-center gap-1.5 rounded-full border border-fd-border bg-fd-background px-2.5 py-1 text-[11px] text-fd-muted-foreground"
           >
-            <SearchIcon className="size-4" />
-            {call.state === 'output-error' || call.state === 'output-denied' ? (
-              <p className="text-fd-error">{call.errorText ?? 'Failed to search'}</p>
-            ) : (
-              <p>{!call.output ? 'Searching…' : `${call.output.length} search results`}</p>
-            )}
+            <SearchIcon size={11} />
+            {call.output ? `${call.output.length} results found` : 'Searching…'}
           </div>
-        );
-      })}
+        ))}
+      </div>
     </div>
   );
 }
 
-export function AISearch({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(false);
-  const chat = useChat<ChatUIMessage>({
-    id: 'search',
-    transport: new DefaultChatTransport({
-      api: '/api/chat',
-    }),
-  });
+// ─── Message list with empty state ───────────────────────────────────────────
+
+const suggestions = [
+  'How do I authenticate with the API?',
+  'What events does the Gateway emit?',
+  'How do bots send messages?',
+];
+
+export function AISearchPanelList({ className, style, ...props }: ComponentProps<'div'>) {
+  const chat = useChatContext();
+  const messages = chat.messages.filter((msg) => msg.role !== 'system');
 
   return (
-    <Context value={useMemo(() => ({ chat, open, setOpen }), [chat, open])}>{children}</Context>
+    <List
+      className={cn('overscroll-contain', className)}
+      style={{
+        maskImage:
+          'linear-gradient(to bottom, transparent, black 1.5rem, black calc(100% - 1.5rem), transparent)',
+        ...style,
+      }}
+      {...props}
+    >
+      {messages.length === 0 ? (
+        <div className="flex flex-col items-center justify-center size-full px-4 py-8 gap-5 text-center">
+          <div className="flex items-center justify-center size-10 rounded-xl bg-fd-primary/12 text-fd-primary">
+            <Sparkles size={18} />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-fd-foreground mb-1">Ask Oliqor AI</p>
+            <p className="text-xs text-fd-muted-foreground">
+              Get instant answers about the Gateway API.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 w-full max-w-65">
+            {suggestions.map((q) => (
+              <button
+                key={q}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void chat.sendMessage({
+                    role: 'user',
+                    parts: [
+                      { type: 'data-client', data: { location: location.href } },
+                      { type: 'text', text: q },
+                    ],
+                  });
+                }}
+                className="rounded-xl border border-fd-border bg-fd-card hover:border-fd-primary/40 hover:bg-fd-primary/5 px-3 py-2 text-xs text-fd-muted-foreground hover:text-fd-foreground text-left transition-all"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-5 px-3 py-4">
+          {chat.error && (
+            <div className="rounded-xl border border-fd-error/30 bg-fd-error/8 px-3 py-2.5">
+              <p className="text-xs font-medium text-fd-error mb-0.5">{chat.error.name}</p>
+              <p className="text-xs text-fd-muted-foreground">{chat.error.message}</p>
+            </div>
+          )}
+          {messages.map((item) => (
+            <Message key={item.id} message={item} />
+          ))}
+        </div>
+      )}
+    </List>
   );
 }
+
+// ─── Root panel ──────────────────────────────────────────────────────────────
+
+export function AISearchPanel() {
+  const { open, setOpen } = useAISearchContext();
+  useHotKey();
+
+  return (
+    <>
+      <style>
+        {`
+          @keyframes ask-ai-open {
+            from { translate: 100% 0; }
+            to   { translate: 0 0; }
+          }
+          @keyframes ask-ai-close {
+            from { width: var(--ai-chat-width); }
+            to   { width: 0px; }
+          }
+        `}
+      </style>
+
+      {/* Mobile backdrop */}
+      <Presence present={open}>
+        <div
+          data-state={open ? 'open' : 'closed'}
+          className="fixed inset-0 z-30 backdrop-blur-xs bg-fd-overlay data-[state=open]:animate-fd-fade-in data-[state=closed]:animate-fd-fade-out lg:hidden"
+          onClick={() => setOpen(false)}
+        />
+      </Presence>
+
+      {/* Panel */}
+      <Presence present={open}>
+        <div
+          className={cn(
+            'overflow-hidden z-30 [--ai-chat-width:380px] 2xl:[--ai-chat-width:440px]',
+            'max-lg:fixed max-lg:inset-x-3 max-lg:inset-y-4 max-lg:rounded-2xl max-lg:shadow-2xl',
+            'lg:sticky lg:top-0 lg:h-dvh lg:border-s lg:ms-auto lg:in-[#nd-docs-layout]:[grid-area:toc] lg:in-[#nd-notebook-layout]:row-span-full lg:in-[#nd-notebook-layout]:col-start-5',
+            'bg-fd-background text-fd-foreground border border-fd-border',
+            open
+              ? 'animate-fd-dialog-in lg:animate-[ask-ai-open_200ms_ease]'
+              : 'animate-fd-dialog-out lg:animate-[ask-ai-close_200ms_ease]',
+          )}
+        >
+          <div className="flex flex-col size-full lg:w-(--ai-chat-width)">
+            <AISearchPanelHeader />
+
+            <AISearchPanelList className="flex-1 py-2" />
+
+            {/* Bottom input area */}
+            <div className="border-t border-fd-border shrink-0">
+              <div className="flex items-center gap-1 px-3 pt-2 empty:hidden min-h-0">
+                <AISearchInputActions />
+              </div>
+              <AISearchInput />
+            </div>
+          </div>
+        </div>
+      </Presence>
+    </>
+  );
+}
+
+// ─── Trigger button ───────────────────────────────────────────────────────────
 
 export function AISearchTrigger({
   position = 'default',
@@ -332,7 +453,7 @@ export function AISearchTrigger({
       data-state={open ? 'open' : 'closed'}
       className={cn(
         position === 'float' && [
-          'fixed bottom-4 gap-3 w-24 inset-e-[calc(--spacing(4)+var(--removed-body-scroll-bar-size,0px))] shadow-lg z-20 transition-[translate,opacity]',
+          'fixed bottom-4 gap-2 inset-e-[calc(--spacing(4)+var(--removed-body-scroll-bar-size,0))] shadow-lg z-20 transition-[translate,opacity]',
           open && 'translate-y-10 opacity-0',
         ],
         className,
@@ -345,100 +466,19 @@ export function AISearchTrigger({
   );
 }
 
-export function AISearchPanel() {
-  const { open, setOpen } = useAISearchContext();
-  useHotKey();
+// ─── Provider / hooks ─────────────────────────────────────────────────────────
+
+export function AISearch({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const chat = useChat<ChatUIMessage>({
+    id: 'search',
+    transport: new DefaultChatTransport({ api: '/api/chat' }),
+  });
 
   return (
-    <>
-      <style>
-        {`
-        @keyframes ask-ai-open {
-          from {
-            translate: 100% 0;
-          }
-          to {
-            translate: 0 0;
-          }
-        }
-        @keyframes ask-ai-close {
-          from {
-            width: var(--ai-chat-width);
-          }
-          to {
-            width: 0px;
-          }
-        }`}
-      </style>
-      <Presence present={open}>
-        <div
-          data-state={open ? 'open' : 'closed'}
-          className="fixed inset-0 z-30 backdrop-blur-xs bg-fd-overlay data-[state=open]:animate-fd-fade-in data-[state=closed]:animate-fd-fade-out lg:hidden"
-          onClick={() => setOpen(false)}
-        />
-      </Presence>
-      <Presence present={open}>
-        <div
-          className={cn(
-            'overflow-hidden z-30 bg-fd-card text-fd-card-foreground [--ai-chat-width:400px] 2xl:[--ai-chat-width:460px]',
-            'max-lg:fixed max-lg:inset-x-2 max-lg:inset-y-4 max-lg:border max-lg:rounded-2xl max-lg:shadow-xl',
-            'lg:sticky lg:top-0 lg:h-dvh lg:border-s lg:ms-auto lg:in-[#nd-docs-layout]:[grid-area:toc] lg:in-[#nd-notebook-layout]:row-span-full lg:in-[#nd-notebook-layout]:col-start-5',
-            open
-              ? 'animate-fd-dialog-in lg:animate-[ask-ai-open_200ms]'
-              : 'animate-fd-dialog-out lg:animate-[ask-ai-close_200ms]',
-          )}
-        >
-          <div className="flex flex-col size-full p-2 lg:p-3 lg:w-(--ai-chat-width)">
-            <AISearchPanelHeader />
-            <AISearchPanelList className="flex-1" />
-            <div className="rounded-xl border bg-fd-secondary text-fd-secondary-foreground shadow-sm has-focus-visible:shadow-md">
-              <AISearchInput />
-              <div className="flex items-center gap-1.5 p-1 empty:hidden">
-                <AISearchInputActions />
-              </div>
-            </div>
-          </div>
-        </div>
-      </Presence>
-    </>
-  );
-}
-
-export function AISearchPanelList({ className, style, ...props }: ComponentProps<'div'>) {
-  const chat = useChatContext();
-  const messages = chat.messages.filter((msg) => msg.role !== 'system');
-
-  return (
-    <List
-      className={cn('py-4 overscroll-contain', className)}
-      style={{
-        maskImage:
-          'linear-gradient(to bottom, transparent, white 1rem, white calc(100% - 1rem), transparent 100%)',
-        ...style,
-      }}
-      {...props}
-    >
-      {messages.length === 0 ? (
-        <div className="text-sm text-fd-muted-foreground/80 size-full flex flex-col items-center justify-center text-center gap-2">
-          <MessageCircleIcon fill="currentColor" stroke="none" />
-          <p onClick={(e) => e.stopPropagation()}>Start a new chat below.</p>
-        </div>
-      ) : (
-        <div className="flex flex-col px-3 gap-4">
-          {chat.error && (
-            <div className="p-2 bg-fd-secondary text-fd-secondary-foreground border rounded-lg">
-              <p className="text-xs text-fd-muted-foreground mb-1">
-                Request Failed: {chat.error.name}
-              </p>
-              <p className="text-sm">{chat.error.message}</p>
-            </div>
-          )}
-          {messages.map((item) => (
-            <Message key={item.id} message={item} />
-          ))}
-        </div>
-      )}
-    </List>
+    <Context value={useMemo(() => ({ chat, open, setOpen }), [chat, open])}>
+      {children}
+    </Context>
   );
 }
 
@@ -450,7 +490,6 @@ export function useHotKey() {
       setOpen(false);
       e.preventDefault();
     }
-
     if (e.key === '/' && (e.metaKey || e.ctrlKey) && !open) {
       setOpen(true);
       e.preventDefault();
