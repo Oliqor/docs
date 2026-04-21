@@ -1,0 +1,403 @@
+---
+title: Users
+description: User objects and user-related endpoints
+---
+
+# Users
+
+## User Object
+
+```json
+{
+	"id": "user_abc123",
+	"username": "alice",
+	"global_name": "Alice",
+	"avatar": "https://cdn.example.com/avatars/abc.png",
+	"banner": "https://cdn.example.com/banners/abc.png",
+	"accent_color": 3447003,
+	"bio": "Building cool things",
+	"pronouns": "she/her",
+	"bot": false,
+	"system": false,
+	"flags": 0,
+	"public_flags": 0
+}
+```
+
+| Field          | Type           | Description                         |
+| -------------- | -------------- | ----------------------------------- |
+| `id`           | string         | The user's unique ID (Clerk ID)     |
+| `username`     | string         | Unique username (2–32 chars)        |
+| `global_name`  | string \| null | Display name shown in the UI        |
+| `avatar`       | string \| null | Avatar image URL                    |
+| `banner`       | string \| null | Profile banner image URL            |
+| `accent_color` | number \| null | Profile accent color as an integer  |
+| `bio`          | string \| null | User bio / about me (max 190 chars) |
+| `pronouns`     | string \| null | Preferred pronouns (max 40 chars)   |
+| `bot`          | boolean        | Whether this is a bot account       |
+| `system`       | boolean        | Whether this is a system account    |
+| `flags`        | number         | User flags bitfield                 |
+| `public_flags` | number         | Public user flags bitfield          |
+
+When fetching your own profile, additional fields may be included:
+
+| Field   | Type           | Description                        |
+| ------- | -------------- | ---------------------------------- |
+| `email` | string \| null | Email address (own profile only)   |
+| `staff` | boolean        | Whether the user is platform staff |
+
+---
+
+## Endpoints
+
+### Get Current User
+
+```
+GET /users/@me
+```
+
+Returns the authenticated user's profile. If the user doesn't exist in the database yet, they are automatically provisioned from Clerk.
+
+**Response 200**: [User object](#user-object) (includes `email` and `staff`).
+
+---
+
+### Update Current User
+
+```
+PATCH /users/@me
+```
+
+Updates the current user's profile. The `username` field syncs to Clerk; all other fields are stored locally in the database.
+
+**Request body** — all fields optional:
+
+| Field          | Type           | Constraints   | Description    |
+| -------------- | -------------- | ------------- | -------------- |
+| `username`     | string         | 2–32 chars    | Syncs to Clerk |
+| `display_name` | string \| null | Max 32 chars  | Display name   |
+| `avatar`       | string \| null | URL           | Avatar URL     |
+| `banner`       | string \| null | URL           | Banner URL     |
+| `accent_color` | number \| null | Integer       | Accent color   |
+| `bio`          | string \| null | Max 190 chars | Bio / about me |
+| `pronouns`     | string \| null | Max 40 chars  | Pronouns       |
+
+Set any field to `null` to clear it.
+
+**Example**:
+
+```json
+{
+	"display_name": "Alice in Wonderland",
+	"bio": "Curiouser and curiouser!",
+	"pronouns": "she/her",
+	"accent_color": 16711680
+}
+```
+
+Fires a `USER_UPDATE` gateway event to the user's own stream.
+
+**Response 200**: Updated [user object](#user-object).
+
+---
+
+### Get User Profile
+
+```
+GET /users/:userId
+```
+
+Returns the public profile of any user. Does not include `email` or `staff` status. Includes `created_at`.
+
+**Response 200**: [User object](#user-object) plus `created_at` (ISO 8601).
+
+---
+
+## Presence
+
+### Get User Presence
+
+```
+GET /users/:userId/presence
+```
+
+Returns the current presence status and activity for any user.
+
+**Response 200**:
+
+```json
+{
+	"user_id": "user_abc123",
+	"status": "online",
+	"custom_status": "Writing code",
+	"activities": [],
+	"last_seen": "2024-01-15T14:30:00.000Z"
+}
+```
+
+| `status` value | Description                               |
+| -------------- | ----------------------------------------- |
+| `online`       | User is active                            |
+| `idle`         | User is idle / AFK                        |
+| `dnd`          | Do Not Disturb — suppresses notifications |
+| `offline`      | User is offline or invisible              |
+
+---
+
+### Update Own Presence
+
+```
+PUT /users/@me/presence
+```
+
+Updates your presence status. A `PRESENCE_UPDATE` gateway event is broadcast to every guild the user belongs to.
+
+**Request body**:
+
+```json
+{
+	"status": "dnd",
+	"customStatus": "In a meeting"
+}
+```
+
+| Field          | Type   | Constraints   | Description                               |
+| -------------- | ------ | ------------- | ----------------------------------------- |
+| `status`       | string | Required      | One of `online`, `idle`, `dnd`, `offline` |
+| `customStatus` | string | Max 128 chars | Free-text status message                  |
+
+---
+
+## Settings
+
+### Get User Settings
+
+```
+GET /users/@me/settings
+```
+
+**Response 200**:
+
+```json
+{
+	"activity_privacy": "everyone"
+}
+```
+
+---
+
+### Update User Settings
+
+```
+PATCH /users/@me/settings
+```
+
+**Request body**:
+
+```json
+{
+	"activityPrivacy": "friends"
+}
+```
+
+| Field             | Values                              | Description                        |
+| ----------------- | ----------------------------------- | ---------------------------------- |
+| `activityPrivacy` | `"everyone"`, `"friends"`, `"none"` | Who can see your activity/presence |
+
+---
+
+## Read States
+
+### Get Read States
+
+```
+GET /users/@me/read-state
+```
+
+Returns the last-read position and unread mention count for every channel the user has interacted with.
+
+**Response 200**:
+
+```json
+[
+	{
+		"channel_id": "ch_general",
+		"last_message_id": "msg_999",
+		"last_read_at": "2024-01-15T10:00:00.000Z",
+		"mention_count": 2
+	}
+]
+```
+
+---
+
+### Acknowledge Messages
+
+```
+POST /channels/:channelId/ack/:messageId
+```
+
+Marks all messages up to `messageId` as read in the channel. Resets the mention count to zero.
+
+Fires a `MESSAGE_ACK` gateway event to the user's own stream.
+
+**Response 200**:
+
+```json
+{
+	"channel_id": "ch_general",
+	"message_id": "msg_999"
+}
+```
+
+---
+
+## Sessions
+
+### Get Active Sessions
+
+```
+GET /users/@me/sessions
+```
+
+Returns all active Clerk sessions for the current user, including which one is the current session.
+
+**Response 200**:
+
+```json
+[
+	{
+		"id": "sess_abc",
+		"status": "active",
+		"last_active_at": 1705334400,
+		"expire_at": 1705938400,
+		"abandon_at": 1706543200,
+		"created_at": 1705334400,
+		"updated_at": 1705334400,
+		"is_current": true
+	}
+]
+```
+
+---
+
+## Guilds
+
+### Get Current User Guilds
+
+```
+GET /users/@me/guilds
+```
+
+Returns all guilds the user is a member of, with their membership details.
+
+**Response 200**:
+
+```json
+[
+	{
+		"id": "guild_abc",
+		"name": "My Guild",
+		"icon": null,
+		"banner": null,
+		"description": "A great community",
+		"owner_id": "user_abc123",
+		"features": [],
+		"member_count": 42,
+		"joined_at": "2024-01-01T00:00:00.000Z",
+		"nick": "alice-nickname",
+		"roles": ["role_mod", "role_vip"]
+	}
+]
+```
+
+---
+
+## Direct Messages
+
+### Open DM Channel
+
+```
+POST /users/@me/channels
+```
+
+Opens a DM channel with another user. If a DM channel already exists, returns the existing one.
+
+**Request body**:
+
+```json
+{
+	"recipientId": "user_def456"
+}
+```
+
+**Response 200**:
+
+```json
+{
+	"id": "dm_abc",
+	"type": 1,
+	"recipients": [
+		{
+			"id": "user_def456",
+			"username": "bob",
+			"global_name": "Bob",
+			"avatar": null
+		}
+	],
+	"last_message_id": null
+}
+```
+
+| `type` | Meaning         |
+| ------ | --------------- |
+| `1`    | DM (one-on-one) |
+| `3`    | Group DM        |
+
+---
+
+### List DM Channels
+
+```
+GET /users/@me/channels
+```
+
+Returns all open DM channels, ordered by last activity.
+
+---
+
+### Send DM Message
+
+```
+POST /channels/:channelId/dm-messages
+```
+
+Sends a message in a DM channel. Only participants of the DM can send messages.
+
+**Request body**:
+
+```json
+{
+	"content": "Hey, how's it going?"
+}
+```
+
+Fires a `DM_MESSAGE_CREATE` gateway event to all participants.
+
+---
+
+### Get DM Messages
+
+```
+GET /channels/:channelId/dm-messages
+```
+
+Retrieves message history from a DM channel.
+
+**Query parameters**:
+
+| Parameter | Type   | Default | Description             |
+| --------- | ------ | ------- | ----------------------- |
+| `limit`   | number | 50      | Max messages (1–100)    |
+| `before`  | string | —       | Messages before this ID |
+| `after`   | string | —       | Messages after this ID  |

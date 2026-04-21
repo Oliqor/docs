@@ -1,0 +1,314 @@
+---
+title: Analytics
+description: Guild analytics provide insights into member growth, message activity, channel performance, and engagement metrics
+---
+
+# Analytics
+
+Guild analytics provide insights into member growth, message activity, channel performance, and engagement metrics. These endpoints are designed for community managers and dashboard builders.
+
+## Access
+
+All analytics endpoints require the `VIEW_GUILD_INSIGHTS` permission (bit 27). This permission is not granted by default — it must be explicitly assigned to a role.
+
+## Caching
+
+Analytics data is computed from live database queries and cached in Redis for performance:
+
+- **Overview, Members, Channels, Engagement**: 10-minute cache (600s TTL)
+- **Messages**: 5-minute cache (300s TTL)
+
+When Redis is unavailable, queries run directly against the database on every request.
+
+## Common Parameters
+
+All analytics endpoints accept a `period` query parameter:
+
+| Value | Description  | Default |
+| ----- | ------------ | ------- |
+| `7d`  | Last 7 days  |         |
+| `30d` | Last 30 days | Yes     |
+| `90d` | Last 90 days |         |
+
+---
+
+## Overview
+
+```
+GET /guilds/:guildId/analytics/overview
+```
+
+A high-level health snapshot of the guild. Ideal for dashboard summary cards.
+
+**Response 200**:
+
+```json
+{
+	"guild_id": "guild_abc",
+	"period": "30d",
+	"total_members": 150,
+	"online_members": 42,
+	"new_members": 12,
+	"members_left": 3,
+	"total_messages": 8450,
+	"total_reactions": 1230,
+	"active_threads": 5,
+	"total_channels": 15
+}
+```
+
+| Field             | Description                                  |
+| ----------------- | -------------------------------------------- |
+| `total_members`   | Current member count                         |
+| `online_members`  | Members currently online (status != offline) |
+| `new_members`     | Members who joined during the period         |
+| `members_left`    | Members who left during the period           |
+| `total_messages`  | Messages sent during the period              |
+| `total_reactions` | Reactions added during the period            |
+| `active_threads`  | Non-archived threads                         |
+| `total_channels`  | Total channel count                          |
+
+---
+
+## Members
+
+```
+GET /guilds/:guildId/analytics/members
+```
+
+Member growth trends, retention, and top contributors.
+
+**Response 200**:
+
+```json
+{
+	"guild_id": "guild_abc",
+	"period": "30d",
+	"total_members": 150,
+	"new_members": 12,
+	"members_left": 3,
+	"retention_rate": 0.92,
+	"daily_growth": [
+		{ "date": "2024-01-01", "joins": 3, "leaves": 1, "net": 2 },
+		{ "date": "2024-01-02", "joins": 1, "leaves": 0, "net": 1 }
+	],
+	"active_members": 89,
+	"inactive_members": 61,
+	"top_contributors": [
+		{
+			"user_id": "user_abc123",
+			"username": "alice",
+			"message_count": 342,
+			"reaction_count": 56,
+			"joined_at": "2024-01-01T00:00:00.000Z"
+		}
+	]
+}
+```
+
+| Field              | Description                                             |
+| ------------------ | ------------------------------------------------------- |
+| `retention_rate`   | Fraction of members who stayed (1.0 = no one left)      |
+| `daily_growth`     | Day-by-day join/leave/net breakdown                     |
+| `active_members`   | Members who sent at least one message during the period |
+| `inactive_members` | Members who did not send any messages                   |
+| `top_contributors` | Members ranked by message + reaction count              |
+
+---
+
+## Messages
+
+```
+GET /guilds/:guildId/analytics/messages
+```
+
+Message volume, hourly distribution, and top channels/contributors.
+
+**Response 200**:
+
+```json
+{
+	"guild_id": "guild_abc",
+	"period": "30d",
+	"total_messages": 8450,
+	"daily_volume": [
+		{ "date": "2024-01-01", "count": 280 },
+		{ "date": "2024-01-02", "count": 315 }
+	],
+	"hourly_distribution": [
+		{ "hour": 0, "count": 45 },
+		{ "hour": 1, "count": 23 },
+		{ "hour": 14, "count": 520 }
+	],
+	"top_channels": [
+		{
+			"channel_id": "ch_general",
+			"channel_name": "general",
+			"message_count": 3200
+		}
+	],
+	"top_contributors": [
+		{
+			"user_id": "user_abc123",
+			"username": "alice",
+			"message_count": 342
+		}
+	]
+}
+```
+
+| Field                 | Description                                                                      |
+| --------------------- | -------------------------------------------------------------------------------- |
+| `daily_volume`        | Messages per day                                                                 |
+| `hourly_distribution` | Messages by hour of day (0–23, UTC). Useful for identifying peak activity times. |
+| `top_channels`        | Most active channels by message count                                            |
+| `top_contributors`    | Most active members by message count                                             |
+
+---
+
+## Channels
+
+```
+GET /guilds/:guildId/analytics/channels
+```
+
+Per-channel activity breakdown.
+
+**Response 200**:
+
+```json
+{
+	"guild_id": "guild_abc",
+	"period": "30d",
+	"channels": [
+		{
+			"channel_id": "ch_general",
+			"channel_name": "general",
+			"type": "text",
+			"message_count": 3200,
+			"unique_posters": 45,
+			"reaction_count": 890,
+			"thread_count": 12,
+			"last_activity": "2024-01-15T14:30:00.000Z"
+		},
+		{
+			"channel_id": "ch_help",
+			"channel_name": "help",
+			"type": "text",
+			"message_count": 450,
+			"unique_posters": 28,
+			"reaction_count": 120,
+			"thread_count": 8,
+			"last_activity": "2024-01-15T12:00:00.000Z"
+		}
+	]
+}
+```
+
+| Field            | Description                                                |
+| ---------------- | ---------------------------------------------------------- |
+| `unique_posters` | Distinct users who sent messages in this channel           |
+| `reaction_count` | Total reactions on messages in this channel                |
+| `thread_count`   | Number of threads in this channel                          |
+| `last_activity`  | Timestamp of the most recent message (null if no messages) |
+
+---
+
+## Engagement
+
+```
+GET /guilds/:guildId/analytics/engagement
+```
+
+Reaction rates, popular emojis, thread participation, and read rates.
+
+**Response 200**:
+
+```json
+{
+	"guild_id": "guild_abc",
+	"period": "30d",
+	"reactions_per_message": 0.15,
+	"messages_with_reactions": 1268,
+	"total_reactions": 1230,
+	"top_emojis": [
+		{ "emoji": "thumbsup", "count": 456 },
+		{ "emoji": "heart", "count": 234 },
+		{ "emoji": "laughing", "count": 189 }
+	],
+	"thread_participation": {
+		"total_threads": 20,
+		"active_threads": 5,
+		"total_thread_members": 67,
+		"avg_members_per_thread": 3.35
+	},
+	"read_rates": {
+		"channels_with_reads": 12,
+		"total_read_states": 890,
+		"avg_unread_mentions": 1.2
+	}
+}
+```
+
+| Field                     | Description                                       |
+| ------------------------- | ------------------------------------------------- |
+| `reactions_per_message`   | Average reactions per message                     |
+| `messages_with_reactions` | Count of messages that have at least one reaction |
+| `top_emojis`              | Most-used reaction emojis                         |
+| `thread_participation`    | Thread engagement metrics                         |
+| `read_rates`              | How actively members read channels                |
+
+---
+
+## Usage Examples
+
+### Dashboard summary widget
+
+Fetch the overview to populate a summary card:
+
+```typescript
+const overview = await fetch(
+	`/guilds/${guildId}/analytics/overview?period=7d`,
+	{
+		headers: { Authorization: `Bearer ${token}` },
+	}
+).then((r) => r.json());
+
+console.log(`${overview.new_members} new members this week`);
+console.log(`${overview.total_messages} messages sent`);
+```
+
+### Identifying peak hours
+
+Use the hourly distribution to find when your community is most active:
+
+```typescript
+const messages = await fetch(
+	`/guilds/${guildId}/analytics/messages?period=30d`,
+	{
+		headers: { Authorization: `Bearer ${token}` },
+	}
+).then((r) => r.json());
+
+const peakHour = messages.hourly_distribution.sort(
+	(a, b) => b.count - a.count
+)[0];
+
+console.log(`Peak activity at ${peakHour.hour}:00 UTC`);
+```
+
+### Finding underused channels
+
+Use channel analytics to identify channels that might need attention:
+
+```typescript
+const channels = await fetch(
+	`/guilds/${guildId}/analytics/channels?period=30d`,
+	{
+		headers: { Authorization: `Bearer ${token}` },
+	}
+).then((r) => r.json());
+
+const quiet = channels.channels.filter((c) => c.message_count < 10);
+console.log(`${quiet.length} channels with fewer than 10 messages this month`);
+```

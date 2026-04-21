@@ -1,13 +1,106 @@
 ---
-title: Hello World
-description: Your first document
+title: README
+description: Welcome to the Oliqor Gateway API documentation! This is your one-stop reference for everything related to building on Oliqor. Whether you're creating a community client, a bot, or an analytics dashboard, you'll find all the details here.
 ---
 
-Welcome to the docs! You can start writing documents in `/content/docs`.
+# Oliqor Gateway API
 
-## What is Next?
+Oliqor is a chat platform designed for real connection. The gateway is the single backend entry point for all real-time and REST operations — whether you're building a community client, a mobile app, or a bot.
 
-<Cards>
-  <Card title="Learn more about Next.js" href="https://nextjs.org/docs" />
-  <Card title="Learn more about Fumadocs" href="https://fumadocs.dev" />
-</Cards>
+## Architecture
+
+The gateway exposes three connection surfaces:
+
+| Surface            | Protocol          | Port              | Purpose                                   |
+| ------------------ | ----------------- | ----------------- | ----------------------------------------- |
+| REST API           | HTTP/1.1 + JSON   | `PORT`            | CRUD operations, management, webhooks     |
+| ConnectRPC Gateway | HTTP/2 + Protobuf | `GRPC_PORT`       | Real-time event streaming, messaging RPCs |
+| Voice Signaling    | WebSocket + JSON  | `PORT` (`/voice`) | WebRTC peer negotiation for audio/video   |
+
+All REST responses use **Discord-compatible snake_case** field names. The ConnectRPC gateway uses Protocol Buffers for efficient binary serialization.
+
+## Base URLs
+
+| Environment | REST + WebSocket                | ConnectRPC                         |
+| ----------- | ------------------------------- | ---------------------------------- |
+| Production  | `https://gw.oliqor.lol`         | `https://msggw.oliqor.lol`         |
+| Staging     | `https://gw-staging.oliqor.lol` | `https://msggw-staging.oliqor.lol` |
+| Local dev   | `http://localhost:$PORT`        | `http://localhost:$GRPC_PORT`      |
+
+## Interactive API Explorer
+
+A Swagger UI is served at **`/swagger`** on the REST server. The OpenAPI spec is auto-generated from the route definitions.
+
+Prometheus metrics are available at **`/metrics`** in standard text format for scraping.
+
+## Quick Start
+
+### 1. Authenticate
+
+Obtain a Clerk JWT from your auth flow and attach it to every request:
+
+```
+Authorization: Bearer <clerk_jwt>
+```
+
+### 2. Fetch your profile
+
+```http
+GET /users/@me
+Authorization: Bearer <token>
+```
+
+### 3. Connect the real-time gateway
+
+```typescript
+import { createClient } from "@connectrpc/connect";
+import { createConnectTransport } from "@connectrpc/connect-node";
+import { GatewayService } from "./gen/gateway_connect";
+
+const transport = createConnectTransport({
+	baseUrl: "https://gw.oliqor.lol",
+});
+const client = createClient(GatewayService, transport);
+
+const stream = client.identify({
+	token: "<clerk_jwt>",
+	intents: GatewayIntents.GUILDS | GatewayIntents.GUILD_MESSAGES,
+});
+
+for await (const event of stream) {
+	console.log(event.event); // MessageCreateEvent, PresenceUpdateEvent, etc.
+}
+```
+
+### 4. Send a message
+
+```http
+POST /channels/<channelId>/messages
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{ "content": "Hello, world!" }
+```
+
+## Documentation
+
+### Core Concepts
+
+| Guide                                 | Description                                                    |
+| ------------------------------------- | -------------------------------------------------------------- |
+| [Authentication](./authentication.md) | Bearer JWT, Bot-Token, and OAuth2 auth flows                   |
+| [Permissions](./permissions.md)       | Bitfield permission system, channel overwrites, role hierarchy |
+| [Gateway Events](./gateway-events.md) | Real-time event streaming, intents, and event reference        |
+
+### REST API Reference
+
+| Guide                                | Description                                              |
+| ------------------------------------ | -------------------------------------------------------- |
+| [Users](./users.md)                  | Profiles, presence, settings, sessions, DMs              |
+| [Guilds](./guilds.md)                | Guild CRUD, members, roles, invites, emojis, stickers    |
+| [Channels & Messages](./channels.md) | Channels, threads, messages, reactions, pins, webhooks   |
+| [Moderation](./moderation.md)        | Bans, auto-moderation rules, audit log                   |
+| [Analytics](./analytics.md)          | Guild insights — members, messages, channels, engagement |
+| [Voice](./voice.md)                  | Voice channels, WebRTC signaling, server mute/deafen     |
+| [Bots & Interactions](./bots.md)     | Applications, commands, interactions, webhook callbacks  |
+| [OAuth2](./oauth2.md)                | Authorization code flow, scopes, token management        |

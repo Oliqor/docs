@@ -1,0 +1,420 @@
+---
+title: Moderation
+description: Oliqor provides a layered moderation system with manual tools, automated content filtering, and a complete audit trail
+---
+
+# Moderation
+
+Oliqor provides a layered moderation system: manual tools for moderators (bans, kicks), automated content filtering (auto-mod rules), and a complete audit trail of all administrative actions.
+
+---
+
+## Bans
+
+Bans prevent a user from rejoining the guild. Unlike kicks, banned users cannot use invite links until the ban is removed.
+
+### List Guild Bans
+
+```
+GET /guilds/:guildId/bans
+```
+
+Requires `BAN_MEMBERS` permission.
+
+**Query parameters**:
+
+| Parameter | Type   | Default | Description                     |
+| --------- | ------ | ------- | ------------------------------- |
+| `limit`   | number | 100     | Max bans to return              |
+| `before`  | string | —       | Return bans before this user ID |
+| `after`   | string | —       | Return bans after this user ID  |
+
+**Response 200**:
+
+```json
+[
+	{
+		"reason": "Repeated harassment",
+		"user": {
+			"id": "user_def456",
+			"username": "baduser",
+			"global_name": null,
+			"avatar": null,
+			"bot": false,
+			"system": false,
+			"flags": 0,
+			"public_flags": 0
+		}
+	}
+]
+```
+
+---
+
+### Get Guild Ban
+
+```
+GET /guilds/:guildId/bans/:userId
+```
+
+Returns a specific ban entry. Returns 404 if the user is not banned.
+
+---
+
+### Create Guild Ban
+
+```
+PUT /guilds/:guildId/bans/:userId
+```
+
+Requires `BAN_MEMBERS` permission.
+
+**Restrictions**:
+
+- You cannot ban yourself.
+- You cannot ban the guild owner.
+
+**Request body** (optional):
+
+```json
+{
+	"reason": "Repeated policy violations",
+	"deleteMessageDays": 7
+}
+```
+
+| Field               | Type   | Default | Description                                           |
+| ------------------- | ------ | ------- | ----------------------------------------------------- |
+| `reason`            | string | null    | Reason for the ban (shown in audit log)               |
+| `deleteMessageDays` | number | 0       | Delete the user's messages from the last N days (0–7) |
+
+**What happens when a user is banned**:
+
+1. A ban record is created.
+2. The user's guild membership is removed.
+3. The user is disconnected from any voice channels.
+4. A `GUILD_BAN_ADD` gateway event is fired.
+5. A `GUILD_MEMBER_REMOVE` gateway event is fired.
+6. An audit log entry is created with type `MEMBER_BAN_ADD`.
+
+---
+
+### Remove Guild Ban (Unban)
+
+```
+DELETE /guilds/:guildId/bans/:userId
+```
+
+Requires `BAN_MEMBERS` permission. The user is not automatically re-added to the guild — they need a new invite.
+
+Fires a `GUILD_BAN_REMOVE` gateway event. Creates an audit log entry with type `MEMBER_BAN_REMOVE`.
+
+---
+
+## Auto-Moderation
+
+Auto-moderation rules automatically detect and act on content that violates guild policies. Rules run on message send and can block messages, send alerts, or apply timeouts.
+
+### How Auto-Mod Works
+
+1. A moderator creates rules with specific triggers and actions.
+2. When a member sends a message, the gateway checks it against all enabled rules.
+3. If a rule matches, the configured actions are executed.
+4. Exempt roles and channels are skipped.
+
+### Trigger Types
+
+| Trigger Type     | Description                                                                                                     |
+| ---------------- | --------------------------------------------------------------------------------------------------------------- |
+| `KEYWORD`        | Matches messages containing specific keywords or patterns. Configure with `keyword_filter` in trigger metadata. |
+| `KEYWORD_PRESET` | Uses built-in keyword lists (profanity, slurs, etc.).                                                           |
+| `SPAM`           | Detects spam patterns (repeated messages, excessive caps, etc.).                                                |
+| `MENTION_SPAM`   | Blocks messages that mention too many users/roles. Configure with `mention_total_limit` in trigger metadata.    |
+| `MEMBER_PROFILE` | Scans member profile fields (username, nickname, bio) for violations.                                           |
+
+### Action Types
+
+| Action Type          | Description                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------------ |
+| `BLOCK_MESSAGE`      | Prevents the message from being sent. The author sees an error.                                  |
+| `SEND_ALERT_MESSAGE` | Sends an alert to a designated moderator channel. Configure with `channelId` in action metadata. |
+| `TIMEOUT`            | Temporarily mutes the member. Configure with `duration_seconds` in action metadata.              |
+
+### Auto-Mod Rule Object
+
+```json
+{
+	"id": "rule_abc",
+	"guild_id": "guild_abc",
+	"name": "Block bad words",
+	"creator_id": "user_abc123",
+	"event_type": 1,
+	"trigger_type": 1,
+	"trigger_metadata": {
+		"keyword_filter": ["badword", "offensive*"],
+		"regex_patterns": ["b[a@]d\\s*w[o0]rd"]
+	},
+	"actions": [
+		{ "type": 1 },
+		{
+			"type": 2,
+			"metadata": { "channelId": "ch_mod_alerts" }
+		}
+	],
+	"enabled": true,
+	"exempt_roles": ["role_mod", "role_admin"],
+	"exempt_channels": ["ch_bot_commands"]
+}
+```
+
+---
+
+### List Auto-Mod Rules
+
+```
+GET /guilds/:guildId/automod/rules
+```
+
+Requires `MANAGE_COMMUNITY` permission.
+
+---
+
+### Get Auto-Mod Rule
+
+```
+GET /guilds/:guildId/automod/rules/:ruleId
+```
+
+---
+
+### Create Auto-Mod Rule
+
+```
+POST /guilds/:guildId/automod/rules
+```
+
+Requires `MANAGE_COMMUNITY` permission.
+
+**Request body**:
+
+```json
+{
+	"name": "Block spam links",
+	"eventType": "MESSAGE_SEND",
+	"triggerType": "KEYWORD",
+	"triggerMetadata": {
+		"keyword_filter": ["discord.gg", "bit.ly", "free nitro"]
+	},
+	"actions": [
+		{ "type": "BLOCK_MESSAGE" },
+		{
+			"type": "SEND_ALERT_MESSAGE",
+			"metadata": { "channelId": "ch_mod_log" }
+		}
+	],
+	"enabled": true,
+	"exemptRoles": ["role_trusted"],
+	"exemptChannels": ["ch_links"]
+}
+```
+
+Fires an `AUTO_MODERATION_RULE_CREATE` gateway event. Creates an audit log entry.
+
+---
+
+### Update Auto-Mod Rule
+
+```
+PATCH /guilds/:guildId/automod/rules/:ruleId
+```
+
+Requires `MANAGE_COMMUNITY` permission. All fields optional.
+
+Fires an `AUTO_MODERATION_RULE_UPDATE` gateway event.
+
+---
+
+### Delete Auto-Mod Rule
+
+```
+DELETE /guilds/:guildId/automod/rules/:ruleId
+```
+
+Requires `MANAGE_COMMUNITY` permission.
+
+Fires an `AUTO_MODERATION_RULE_DELETE` gateway event.
+
+---
+
+### Auto-Mod Gateway Events
+
+| Event                              | Intent Required         | Description                                     |
+| ---------------------------------- | ----------------------- | ----------------------------------------------- |
+| `AUTO_MODERATION_RULE_CREATE`      | `AUTOMOD_CONFIGURATION` | A rule was created                              |
+| `AUTO_MODERATION_RULE_UPDATE`      | `AUTOMOD_CONFIGURATION` | A rule was updated                              |
+| `AUTO_MODERATION_RULE_DELETE`      | `AUTOMOD_CONFIGURATION` | A rule was deleted                              |
+| `AUTO_MODERATION_ACTION_EXECUTION` | `AUTOMOD_EXECUTION`     | A rule was triggered and an action was executed |
+
+---
+
+## Audit Log
+
+The audit log is an immutable, append-only record of all administrative actions in a guild. It tracks who did what, when, and optionally why.
+
+### Get Guild Audit Log
+
+```
+GET /guilds/:guildId/audit-logs
+```
+
+Requires `VIEW_AUDIT_LOG` permission.
+
+**Query parameters**:
+
+| Parameter     | Type   | Default | Description                                   |
+| ------------- | ------ | ------- | --------------------------------------------- |
+| `user_id`     | string | —       | Filter by the user who performed the action   |
+| `action_type` | string | —       | Filter by event type (e.g., `MEMBER_BAN_ADD`) |
+| `before`      | string | —       | Return entries before this audit log entry ID |
+| `limit`       | number | 50      | Max entries to return (1–100)                 |
+
+**Response 200**:
+
+```json
+{
+	"audit_log_entries": [
+		{
+			"id": "entry_abc",
+			"user_id": "user_abc123",
+			"target_id": "user_def456",
+			"action_type": "MEMBER_BAN_ADD",
+			"changes": [
+				{
+					"key": "reason",
+					"new_value": "Spamming"
+				}
+			],
+			"reason": "Spamming",
+			"created_at": "2024-01-15T10:00:00.000Z"
+		}
+	]
+}
+```
+
+### Audit Log Event Types
+
+#### Guild
+
+| Event Type     | Description                 |
+| -------------- | --------------------------- |
+| `GUILD_UPDATE` | Guild settings were changed |
+
+#### Channels
+
+| Event Type                 | Description                      |
+| -------------------------- | -------------------------------- |
+| `CHANNEL_CREATE`           | Channel was created              |
+| `CHANNEL_UPDATE`           | Channel settings were changed    |
+| `CHANNEL_DELETE`           | Channel was deleted              |
+| `CHANNEL_OVERWRITE_CREATE` | Permission overwrite was added   |
+| `CHANNEL_OVERWRITE_UPDATE` | Permission overwrite was changed |
+| `CHANNEL_OVERWRITE_DELETE` | Permission overwrite was removed |
+
+#### Members
+
+| Event Type           | Description                              |
+| -------------------- | ---------------------------------------- |
+| `MEMBER_KICK`        | Member was kicked                        |
+| `MEMBER_BAN_ADD`     | Member was banned                        |
+| `MEMBER_BAN_REMOVE`  | Member was unbanned                      |
+| `MEMBER_UPDATE`      | Member settings changed (nickname, etc.) |
+| `MEMBER_ROLE_UPDATE` | Member's roles were changed              |
+
+#### Roles
+
+| Event Type    | Description      |
+| ------------- | ---------------- |
+| `ROLE_CREATE` | Role was created |
+| `ROLE_UPDATE` | Role was updated |
+| `ROLE_DELETE` | Role was deleted |
+
+#### Invites
+
+| Event Type      | Description        |
+| --------------- | ------------------ |
+| `INVITE_CREATE` | Invite was created |
+| `INVITE_DELETE` | Invite was deleted |
+
+#### Webhooks
+
+| Event Type       | Description         |
+| ---------------- | ------------------- |
+| `WEBHOOK_CREATE` | Webhook was created |
+| `WEBHOOK_UPDATE` | Webhook was updated |
+| `WEBHOOK_DELETE` | Webhook was deleted |
+
+#### Emojis & Stickers
+
+| Event Type       | Description         |
+| ---------------- | ------------------- |
+| `EMOJI_CREATE`   | Emoji was created   |
+| `EMOJI_UPDATE`   | Emoji was updated   |
+| `EMOJI_DELETE`   | Emoji was deleted   |
+| `STICKER_CREATE` | Sticker was created |
+| `STICKER_UPDATE` | Sticker was updated |
+| `STICKER_DELETE` | Sticker was deleted |
+
+#### Messages
+
+| Event Type            | Description                        |
+| --------------------- | ---------------------------------- |
+| `MESSAGE_DELETE`      | Message was deleted by a moderator |
+| `MESSAGE_BULK_DELETE` | Messages were bulk deleted         |
+| `MESSAGE_PIN`         | Message was pinned                 |
+| `MESSAGE_UNPIN`       | Message was unpinned               |
+
+#### Auto-Moderation
+
+| Event Type                    | Description               |
+| ----------------------------- | ------------------------- |
+| `AUTO_MODERATION_RULE_CREATE` | Auto-mod rule was created |
+| `AUTO_MODERATION_RULE_UPDATE` | Auto-mod rule was updated |
+| `AUTO_MODERATION_RULE_DELETE` | Auto-mod rule was deleted |
+
+#### Scheduled Events
+
+| Event Type               | Description                 |
+| ------------------------ | --------------------------- |
+| `SCHEDULED_EVENT_CREATE` | Scheduled event was created |
+| `SCHEDULED_EVENT_UPDATE` | Scheduled event was updated |
+| `SCHEDULED_EVENT_DELETE` | Scheduled event was deleted |
+
+#### Threads
+
+| Event Type      | Description        |
+| --------------- | ------------------ |
+| `THREAD_CREATE` | Thread was created |
+| `THREAD_UPDATE` | Thread was updated |
+| `THREAD_DELETE` | Thread was deleted |
+
+#### Commands
+
+| Event Type                  | Description                          |
+| --------------------------- | ------------------------------------ |
+| `COMMAND_PERMISSION_UPDATE` | Bot command permissions were changed |
+
+---
+
+## Moderation Permissions Summary
+
+| Action                        | Required Permission |
+| ----------------------------- | ------------------- |
+| Ban/unban members             | `BAN_MEMBERS`       |
+| Kick members                  | `KICK_MEMBERS`      |
+| Delete others' messages       | `MANAGE_MESSAGES`   |
+| Manage auto-mod rules         | `MANAGE_COMMUNITY`  |
+| View audit log                | `VIEW_AUDIT_LOG`    |
+| Server mute in voice          | `MUTE_MEMBERS`      |
+| Server deafen in voice        | `DEAFEN_MEMBERS`    |
+| Move/disconnect voice members | `MOVE_MEMBERS`      |
+| Manage channel permissions    | `MANAGE_CHANNELS`   |

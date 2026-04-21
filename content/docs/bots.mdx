@@ -1,0 +1,562 @@
+---
+title: Bots & Interactions
+description: Bots (applications) extend Oliqor with custom functionality
+---
+
+# Bots & Interactions
+
+Bots (applications) extend Oliqor with custom functionality. They can respond to slash commands, send messages, react to events, and manage guild resources.
+
+## Concepts
+
+### Applications
+
+An **application** is the bot registration itself. It has a name, description, owner, and a secret token used for authentication.
+
+### Commands
+
+**Commands** are the slash commands that users invoke (e.g., `/ping`, `/ban @user`). Commands can be registered globally (available in all guilds) or per-guild.
+
+### Interactions
+
+An **interaction** is the event that fires when a user invokes a command, clicks a button, or submits a modal. The gateway dispatches interactions to the bot's webhook URL.
+
+### Bot Installation
+
+Bots must be **installed** in a guild before their commands are available there. Installation is done by a guild admin.
+
+---
+
+## Bot Authentication
+
+Bot endpoints use a static `Bot-Token` header:
+
+```
+Bot-Token: <64-char hex token>
+```
+
+The token is shown **once** at application creation. If lost, generate a new one with the reset endpoint (this invalidates the old token).
+
+---
+
+## Applications
+
+### Create Application
+
+```
+POST /applications
+```
+
+**Request body**:
+
+```json
+{
+	"name": "My Bot",
+	"description": "A helpful bot",
+	"interactionUrl": "https://mybot.example.com/interactions"
+}
+```
+
+| Field            | Type   | Required | Constraints   | Description                          |
+| ---------------- | ------ | -------- | ------------- | ------------------------------------ |
+| `name`           | string | Yes      | 1–100 chars   | Bot display name                     |
+| `description`    | string | No       | Max 500 chars | Bot description                      |
+| `interactionUrl` | string | No       | Valid URL     | Webhook URL for interaction dispatch |
+
+**Response 200**:
+
+```json
+{
+	"id": "bot_abc",
+	"name": "My Bot",
+	"description": "A helpful bot",
+	"interaction_url": "https://mybot.example.com/interactions",
+	"owner_id": "user_abc123",
+	"token": "<64-char hex token>",
+	"created_at": "2024-01-15T14:30:00.000Z"
+}
+```
+
+> **Save the token immediately.** It is returned only once and cannot be retrieved again. Use `POST /applications/:botId/reset-token` to generate a new one if lost.
+
+---
+
+### List Applications
+
+```
+GET /applications
+```
+
+Lists all applications you own. Supports cursor-based pagination via `limit` and `after` query params (max 100).
+
+**Response 200** — array of:
+
+```json
+{
+	"id": "bot_abc",
+	"name": "My Bot",
+	"description": "A helpful bot",
+	"avatar_url": null,
+	"interaction_url": "https://mybot.example.com/interactions",
+	"token_prefix": "a1b2c3d4",
+	"is_public": false,
+	"command_count": 3,
+	"installation_count": 12,
+	"created_at": "2024-01-15T14:30:00.000Z"
+}
+```
+
+---
+
+### Get Application
+
+```
+GET /applications/:botId
+```
+
+Public bots are visible to all authenticated users. Private bots are only visible to their owner.
+
+**Response 200**:
+
+```json
+{
+	"id": "bot_abc",
+	"name": "My Bot",
+	"description": "A helpful bot",
+	"avatar_url": null,
+	"interaction_url": "https://mybot.example.com/interactions",
+	"token_prefix": "a1b2c3d4",
+	"is_public": false,
+	"owner_id": "user_abc123",
+	"commands": [
+		{
+			"id": "cmd_abc",
+			"name": "ping",
+			"description": "Replies with pong",
+			"type": 1,
+			"options": [],
+			"guild_id": null
+		}
+	],
+	"installations": [
+		{
+			"guild_id": "guild_abc",
+			"permissions": "256",
+			"installed_at": "2024-01-15T14:30:00.000Z"
+		}
+	],
+	"created_at": "2024-01-15T14:30:00.000Z"
+}
+```
+
+> `interaction_url`, `token_prefix`, and `installations` are only returned to the bot owner.
+
+---
+
+### Update Application
+
+```
+PATCH /applications/:botId
+```
+
+Owner only.
+
+```json
+{
+	"name": "My Bot v2",
+	"description": "Now even more helpful",
+	"avatarUrl": "https://example.com/avatar.png",
+	"interactionUrl": "https://mybot.example.com/v2",
+	"isPublic": true
+}
+```
+
+---
+
+### Reset Bot Token
+
+```
+POST /applications/:botId/reset-token
+```
+
+Owner only. **Immediately invalidates** the old token.
+
+**Response 200**:
+
+```json
+{
+	"token": "<new 64-char hex token>",
+	"message": "Token reset. Save the new token — it will not be shown again."
+}
+```
+
+---
+
+### Delete Application
+
+```
+DELETE /applications/:botId
+```
+
+Owner only. Permanently deletes the bot, all its commands, and all installations.
+
+---
+
+## Commands
+
+Commands define the slash commands users can invoke. They can be registered globally or scoped to a specific guild.
+
+### Command Object
+
+```json
+{
+	"id": "cmd_abc",
+	"application_id": "bot_abc",
+	"name": "ping",
+	"description": "Replies with pong",
+	"type": 1,
+	"options": [],
+	"default_permission": true
+}
+```
+
+| `type` | Name       | Description                   |
+| ------ | ---------- | ----------------------------- |
+| `1`    | CHAT_INPUT | Slash command (e.g., `/ping`) |
+| `2`    | USER       | Context menu on a user        |
+| `3`    | MESSAGE    | Context menu on a message     |
+
+### Command Options
+
+Options define the parameters a command accepts:
+
+```json
+{
+	"name": "user",
+	"description": "The user to greet",
+	"type": 6,
+	"required": true
+}
+```
+
+| Option Type | Name              |
+| ----------- | ----------------- |
+| `1`         | SUB_COMMAND       |
+| `2`         | SUB_COMMAND_GROUP |
+| `3`         | STRING            |
+| `4`         | INTEGER           |
+| `5`         | BOOLEAN           |
+| `6`         | USER              |
+| `7`         | CHANNEL           |
+| `8`         | ROLE              |
+| `9`         | MENTIONABLE       |
+| `10`        | NUMBER            |
+| `11`        | ATTACHMENT        |
+
+---
+
+### Global Commands (Bot-Token auth)
+
+#### Bulk Overwrite Global Commands
+
+```
+PUT /applications/:botId/commands
+```
+
+Replaces **all** global commands. This is the recommended way to sync commands on bot startup.
+
+```json
+[
+	{
+		"name": "ping",
+		"description": "Replies with pong",
+		"type": 1
+	},
+	{
+		"name": "echo",
+		"description": "Repeats your message",
+		"type": 1,
+		"options": [
+			{
+				"name": "message",
+				"description": "What to echo",
+				"type": 3,
+				"required": true
+			}
+		]
+	}
+]
+```
+
+#### Create / List / Delete Global Commands
+
+```
+POST   /applications/:botId/commands
+GET    /applications/:botId/commands
+DELETE /applications/:botId/commands/:commandId
+```
+
+---
+
+### Guild Commands (Bot-Token auth)
+
+Guild commands are only available in a specific guild. The bot must be installed there.
+
+```
+PUT    /applications/:botId/guilds/:guildId/commands      — Bulk overwrite
+POST   /applications/:botId/guilds/:guildId/commands      — Create
+GET    /applications/:botId/guilds/:guildId/commands      — List
+GET    /applications/:botId/guilds/:guildId/commands/:id  — Get
+PATCH  /applications/:botId/guilds/:guildId/commands/:id  — Update
+DELETE /applications/:botId/guilds/:guildId/commands/:id  — Delete
+```
+
+---
+
+### Command Permissions (Bot-Token auth)
+
+Override which roles/users/channels can use specific commands:
+
+```
+GET /applications/:botId/guilds/:guildId/commands/permissions
+PUT /applications/:botId/guilds/:guildId/commands/permissions
+GET /applications/:botId/guilds/:guildId/commands/:commandId/permissions
+PUT /applications/:botId/guilds/:guildId/commands/:commandId/permissions
+```
+
+Permission object:
+
+```json
+{
+	"id": "role_mod",
+	"type": 1,
+	"permission": true
+}
+```
+
+| `type` | Target type |
+| ------ | ----------- |
+| `1`    | Role        |
+| `2`    | User        |
+| `3`    | Channel     |
+
+---
+
+## Bot Installation
+
+### Install Bot in Guild
+
+```
+POST /guilds/:guildId/bots/:botId
+```
+
+Requires `MANAGE_COMMUNITY` permission. The bot must be public or owned by the caller.
+
+```json
+{
+	"permissions": "256"
+}
+```
+
+### Uninstall Bot
+
+```
+DELETE /guilds/:guildId/bots/:botId
+```
+
+### List Installed Bots
+
+```
+GET /guilds/:guildId/bots
+```
+
+---
+
+## Interactions
+
+### The Interaction Lifecycle
+
+```
+1. User invokes /ping in a guild channel
+2. Client sends POST /interactions with command details
+3. Gateway looks up the command from installed bots
+4. Gateway POSTs the interaction to the bot's interactionUrl webhook
+5. Bot responds synchronously with one of:
+   a. Immediate message (type 4)
+   b. Deferred response (type 5) — "bot is thinking..."
+   c. Modal dialog (type 9)
+6. For deferred responses, bot later calls POST /webhooks/:id/:token
+```
+
+### Invoke Slash Command
+
+```
+POST /interactions
+```
+
+```json
+{
+	"commandName": "ping",
+	"channelId": "ch_general",
+	"communityId": "guild_abc",
+	"options": [{ "name": "target", "value": "alice" }]
+}
+```
+
+**Response** depends on the bot's response type:
+
+| Response Type                        | Value | Description                               |
+| ------------------------------------ | ----- | ----------------------------------------- |
+| CHANNEL_MESSAGE_WITH_SOURCE          | `4`   | Immediate message response                |
+| DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE | `5`   | Acknowledge, respond later                |
+| DEFERRED_UPDATE_MESSAGE              | `6`   | Acknowledge component, no visible loading |
+| UPDATE_MESSAGE                       | `7`   | Edit the original message (component)     |
+| AUTOCOMPLETE_RESULT                  | `8`   | Return autocomplete suggestions           |
+| MODAL                                | `9`   | Open a modal dialog                       |
+
+---
+
+### Component Interaction
+
+```
+POST /interactions/component
+```
+
+Fired when a user clicks a button or selects from a dropdown embedded in a bot message.
+
+```json
+{
+	"customId": "confirm_button",
+	"messageId": "msg_123",
+	"channelId": "ch_general",
+	"communityId": "guild_abc",
+	"componentType": 2,
+	"values": []
+}
+```
+
+| Component Type | Name               |
+| -------------- | ------------------ |
+| `1`            | Action Row         |
+| `2`            | Button             |
+| `3`            | String Select      |
+| `4`            | Text Input         |
+| `5`            | User Select        |
+| `6`            | Role Select        |
+| `7`            | Mentionable Select |
+| `8`            | Channel Select     |
+
+---
+
+### Modal Submit
+
+```
+POST /interactions/modal
+```
+
+```json
+{
+	"customId": "feedback_form",
+	"applicationId": "bot_abc",
+	"channelId": "ch_general",
+	"communityId": "guild_abc",
+	"components": [
+		{ "type": 4, "custom_id": "name_input", "value": "Alice" },
+		{ "type": 4, "custom_id": "feedback", "value": "Great bot!" }
+	]
+}
+```
+
+---
+
+### Get Interaction
+
+```
+GET /interactions/:interactionId
+```
+
+### List Guild Commands (User auth)
+
+```
+GET /guilds/:guildId/commands
+```
+
+Returns all commands available in the guild from all installed bots.
+
+### Autocomplete
+
+```
+GET /guilds/:guildId/commands/autocomplete?name=ping&focused=target&value=al
+```
+
+---
+
+## Webhook Callbacks (Bot-Token auth)
+
+After a deferred response, use these endpoints to send the actual reply.
+
+### Send Follow-up Message
+
+```
+POST /webhooks/:webhookId/:webhookToken
+```
+
+```json
+{
+	"content": "Here is the result!",
+	"embeds": [],
+	"components": [],
+	"flags": 0
+}
+```
+
+At least one of `content` or `embeds` required. Can only be called once per interaction.
+
+### Edit Original Response
+
+```
+PATCH /webhooks/:webhookId/:webhookToken/messages/@original
+```
+
+### Delete Original Response
+
+```
+DELETE /webhooks/:webhookId/:webhookToken/messages/@original
+```
+
+---
+
+## Bot Webhook Payload
+
+When the gateway dispatches an interaction to your bot's `interactionUrl`, it sends a POST with this structure:
+
+```json
+{
+	"id": "int_abc",
+	"type": 2,
+	"token": "<interaction_token>",
+	"application_id": "bot_abc",
+	"channel_id": "ch_general",
+	"guild_id": "guild_abc",
+	"member": {
+		"user": { "id": "user_abc123", "username": "alice" },
+		"roles": ["role_mod"],
+		"permissions": "104324673"
+	},
+	"data": {
+		"name": "ping",
+		"options": []
+	}
+}
+```
+
+Your bot should respond with a JSON body indicating the response type:
+
+```json
+{
+	"type": 4,
+	"data": {
+		"content": "Pong! 🏓"
+	}
+}
+```

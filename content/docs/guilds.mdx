@@ -1,0 +1,556 @@
+---
+title: Guilds
+description: A guild is the top-level grouping in Oliqor (equivalent to a server in Discord)
+---
+
+# Guilds
+
+A **guild** is the top-level grouping in Oliqor (equivalent to a "server" in Discord). Guilds contain channels, members, roles, emojis, stickers, and more.
+
+## Guild Object
+
+```json
+{
+	"id": "guild_abc",
+	"name": "My Guild",
+	"icon": "https://cdn.example.com/icons/abc.png",
+	"splash": null,
+	"banner": null,
+	"description": "A place to hang out",
+	"owner_id": "user_abc123",
+	"features": [],
+	"vanity_url_code": null,
+	"system_channel_id": "ch_general",
+	"system_channel_flags": 0,
+	"rules_channel_id": null,
+	"verification_level": 0,
+	"default_message_notifications": 0,
+	"explicit_content_filter": 0,
+	"mfa_level": 0,
+	"premium_tier": 0,
+	"premium_subscription_count": 0,
+	"nsfw_level": 0,
+	"preferred_locale": "en-US",
+	"afk_channel_id": null,
+	"afk_timeout": 300,
+	"max_members": 500000,
+	"member_count": 42,
+	"roles": [],
+	"channels": [],
+	"members": [],
+	"emojis": []
+}
+```
+
+---
+
+## Guild Endpoints
+
+### Create Guild
+
+```
+POST /guilds
+```
+
+Creates a new guild. A `#general` text channel and an `@everyone` role with [default permissions](./permissions.md#default-member-permissions) are created automatically. The creator becomes the owner.
+
+**Request body**:
+
+```json
+{
+	"name": "My Guild",
+	"description": "A place to chat",
+	"icon": "https://example.com/icon.png"
+}
+```
+
+| Field         | Type   | Constraints   | Required |
+| ------------- | ------ | ------------- | -------- |
+| `name`        | string | 1–100 chars   | Yes      |
+| `description` | string | Max 500 chars | No       |
+| `icon`        | string | URL           | No       |
+
+**Response 200**: Full [guild object](#guild-object).
+
+---
+
+### Get Guild
+
+```
+GET /guilds/:guildId
+```
+
+Returns the full guild object including channels (ordered by position), roles, members, and emojis.
+
+---
+
+### Update Guild
+
+```
+PATCH /guilds/:guildId
+```
+
+Requires `MANAGE_COMMUNITY` permission. All fields optional.
+
+**Request body**:
+
+```json
+{
+	"name": "New Name",
+	"description": "Updated description",
+	"icon": "https://example.com/new-icon.png"
+}
+```
+
+Fires a `GUILD_UPDATE` gateway event. Creates an audit log entry.
+
+---
+
+### Delete Guild
+
+```
+DELETE /guilds/:guildId
+```
+
+Owner only. Permanently deletes the guild and **all** associated data (channels, messages, roles, members, bans, etc.). This action is irreversible.
+
+Fires a `GUILD_DELETE` gateway event.
+
+---
+
+## Members
+
+### Member Object
+
+```json
+{
+	"user": {
+		"id": "user_abc123",
+		"username": "alice",
+		"global_name": "Alice",
+		"avatar": "https://cdn.example.com/avatars/abc.png"
+	},
+	"nick": "ali",
+	"avatar": "https://cdn.example.com/guild-avatars/abc.png",
+	"roles": ["role_mod", "role_vip"],
+	"joined_at": "2024-01-01T00:00:00.000Z",
+	"flags": 0,
+	"pending": false
+}
+```
+
+| Field       | Type           | Description                                                    |
+| ----------- | -------------- | -------------------------------------------------------------- |
+| `user`      | User object    | The underlying user (may be omitted in some contexts)          |
+| `nick`      | string \| null | Guild-specific nickname                                        |
+| `avatar`    | string \| null | Guild-specific avatar URL                                      |
+| `roles`     | string[]       | Array of role IDs the member has                               |
+| `joined_at` | string         | ISO 8601 timestamp of when they joined                         |
+| `flags`     | number         | Member flags bitfield                                          |
+| `pending`   | boolean        | Whether the member has passed the guild's membership screening |
+
+---
+
+### List Guild Members
+
+```
+GET /guilds/:guildId/members
+```
+
+**Query parameters**:
+
+| Parameter | Type   | Default | Description                       |
+| --------- | ------ | ------- | --------------------------------- |
+| `limit`   | number | 100     | Max members (1–1000)              |
+| `after`   | string | —       | Return members after this user ID |
+
+**Response 200**: Array of [member objects](#member-object).
+
+---
+
+### Get Guild Member
+
+```
+GET /guilds/:guildId/members/:userId
+```
+
+Returns a single member by user ID.
+
+---
+
+### Get Own Member
+
+```
+GET /guilds/:guildId/members/@me
+```
+
+Returns the authenticated user's member object in the guild, including computed permissions.
+
+---
+
+### Update Own Member Profile
+
+```
+PATCH /guilds/:guildId/members/@me
+```
+
+Update your own nickname and per-guild avatar.
+
+**Request body** — all fields optional:
+
+```json
+{
+	"nick": "my-nickname",
+	"avatar": "https://example.com/guild-avatar.png"
+}
+```
+
+Set to `null` to clear. Fires a `GUILD_MEMBER_UPDATE` gateway event.
+
+---
+
+### Update Guild Member
+
+```
+PATCH /guilds/:guildId/members/:userId
+```
+
+Requires `MANAGE_ROLES` or `KICK_MEMBERS` permission depending on the action.
+
+**Request body** — all fields optional:
+
+```json
+{
+	"nick": "new-nick",
+	"channelId": "ch_voice_2",
+	"mute": true,
+	"deaf": false
+}
+```
+
+| Field       | Permission Required | Description                                              |
+| ----------- | ------------------- | -------------------------------------------------------- |
+| `nick`      | `MANAGE_ROLES`      | Set the member's nickname                                |
+| `channelId` | `MOVE_MEMBERS`      | Move member to a voice channel (or `null` to disconnect) |
+| `mute`      | `MUTE_MEMBERS`      | Server-mute in voice                                     |
+| `deaf`      | `DEAFEN_MEMBERS`    | Server-deafen in voice                                   |
+
+---
+
+### Remove Guild Member (Kick)
+
+```
+DELETE /guilds/:guildId/members/:userId
+```
+
+Requires `KICK_MEMBERS` permission. Removes the member from the guild. They can rejoin via invite (unlike a ban).
+
+Fires a `GUILD_MEMBER_REMOVE` gateway event. Creates an audit log entry.
+
+---
+
+## Roles
+
+### Role Object
+
+```json
+{
+	"id": "role_mod",
+	"name": "Moderator",
+	"color": 3447003,
+	"hoist": true,
+	"icon": null,
+	"unicode_emoji": null,
+	"position": 2,
+	"permissions": "104324673",
+	"managed": false,
+	"mentionable": true
+}
+```
+
+| Field         | Type    | Description                                                           |
+| ------------- | ------- | --------------------------------------------------------------------- |
+| `id`          | string  | Role ID                                                               |
+| `name`        | string  | Role name                                                             |
+| `color`       | number  | Integer color value (0 = no color)                                    |
+| `hoist`       | boolean | Whether this role is displayed separately in the member sidebar       |
+| `position`    | number  | Position in the role hierarchy (higher = more powerful)               |
+| `permissions` | string  | Permission bitfield as a string (see [Permissions](./permissions.md)) |
+| `managed`     | boolean | Whether this role is managed by an integration                        |
+| `mentionable` | boolean | Whether this role can be mentioned by anyone                          |
+
+---
+
+### List Guild Roles
+
+```
+GET /guilds/:guildId/roles
+```
+
+Returns all roles ordered by position.
+
+---
+
+### Create Role
+
+```
+POST /guilds/:guildId/roles
+```
+
+Requires `MANAGE_ROLES` permission.
+
+**Request body**:
+
+```json
+{
+	"name": "Moderator",
+	"color": 3447003,
+	"permissions": "104324673",
+	"hoist": true,
+	"mentionable": true
+}
+```
+
+Fires a `GUILD_ROLE_CREATE` gateway event. Creates an audit log entry.
+
+---
+
+### Update Role
+
+```
+PATCH /guilds/:guildId/roles/:roleId
+```
+
+Requires `MANAGE_ROLES` permission. All fields optional. You can only edit roles positioned below your highest role.
+
+Fires a `GUILD_ROLE_UPDATE` gateway event.
+
+---
+
+### Delete Role
+
+```
+DELETE /guilds/:guildId/roles/:roleId
+```
+
+Requires `MANAGE_ROLES` permission. Cannot delete the `@everyone` role.
+
+Fires a `GUILD_ROLE_DELETE` gateway event.
+
+---
+
+### Add Role to Member
+
+```
+PUT /guilds/:guildId/members/:userId/roles/:roleId
+```
+
+Requires `MANAGE_ROLES` permission.
+
+Fires a `GUILD_MEMBER_UPDATE` gateway event. Creates an audit log entry.
+
+---
+
+### Remove Role from Member
+
+```
+DELETE /guilds/:guildId/members/:userId/roles/:roleId
+```
+
+Requires `MANAGE_ROLES` permission.
+
+---
+
+## Invites
+
+### Create Invite
+
+```
+POST /guilds/:guildId/invites
+```
+
+Requires `CREATE_INVITES` permission.
+
+**Request body** — all fields optional:
+
+```json
+{
+	"maxUses": 10,
+	"expiresInHours": 24,
+	"channelId": "ch_general"
+}
+```
+
+| Field            | Type   | Default         | Description                      |
+| ---------------- | ------ | --------------- | -------------------------------- |
+| `maxUses`        | number | `0` (unlimited) | Max times the invite can be used |
+| `expiresInHours` | number | `0` (never)     | Hours until the invite expires   |
+| `channelId`      | string | —               | Channel the invite links to      |
+
+**Response 200**: Invite object with a `code` field.
+
+---
+
+### Get Invite Info
+
+```
+GET /invites/:code
+```
+
+**No authentication required.** Returns community info for the invite without joining. Returns 404 if expired or exhausted.
+
+---
+
+### Join via Invite
+
+```
+POST /invites/:code
+```
+
+Consumes an invite code and joins the guild.
+
+| Status | Meaning                            |
+| ------ | ---------------------------------- |
+| 200    | Successfully joined                |
+| 409    | Already a member                   |
+| 410    | Invite expired or max uses reached |
+
+---
+
+### List Guild Invites
+
+```
+GET /guilds/:guildId/invites
+```
+
+Requires `MANAGE_INVITES` permission. Returns all invites with usage and expiry info.
+
+---
+
+### Delete Invite
+
+```
+DELETE /guilds/:guildId/invites/:code
+```
+
+The invite creator or anyone with `MANAGE_INVITES` can delete.
+
+---
+
+## Emojis
+
+### List Guild Emojis
+
+```
+GET /guilds/:guildId/emojis
+```
+
+### Create Emoji
+
+```
+POST /guilds/:guildId/emojis
+```
+
+Requires `MANAGE_EMOJIS` permission.
+
+### Delete Emoji
+
+```
+DELETE /guilds/:guildId/emojis/:emojiId
+```
+
+Requires `MANAGE_EMOJIS` permission.
+
+---
+
+## Stickers
+
+### List Guild Stickers
+
+```
+GET /guilds/:guildId/stickers
+```
+
+### Get Sticker
+
+```
+GET /guilds/:guildId/stickers/:stickerId
+```
+
+### Create Sticker
+
+```
+POST /guilds/:guildId/stickers
+```
+
+### Update Sticker
+
+```
+PATCH /guilds/:guildId/stickers/:stickerId
+```
+
+### Delete Sticker
+
+```
+DELETE /guilds/:guildId/stickers/:stickerId
+```
+
+---
+
+## Scheduled Events
+
+### List Scheduled Events
+
+```
+GET /guilds/:guildId/scheduled-events
+```
+
+### Get Scheduled Event
+
+```
+GET /guilds/:guildId/scheduled-events/:eventId
+```
+
+### Create Scheduled Event
+
+```
+POST /guilds/:guildId/scheduled-events
+```
+
+**Request body**:
+
+```json
+{
+	"name": "Community Game Night",
+	"description": "Let's play some games!",
+	"scheduledStart": "2024-02-01T20:00:00.000Z",
+	"scheduledEnd": "2024-02-01T23:00:00.000Z",
+	"entityType": "VOICE",
+	"channelId": "ch_voice_1"
+}
+```
+
+| `entityType`     | API Value | Description                                     |
+| ---------------- | --------- | ----------------------------------------------- |
+| `STAGE_INSTANCE` | `1`       | Stage channel event                             |
+| `VOICE`          | `2`       | Voice channel event                             |
+| `EXTERNAL`       | `3`       | External event (uses `entityMetadata.location`) |
+
+| `status`    | API Value | Description                |
+| ----------- | --------- | -------------------------- |
+| `SCHEDULED` | `1`       | Event is scheduled         |
+| `ACTIVE`    | `2`       | Event is currently running |
+| `COMPLETED` | `3`       | Event has ended            |
+| `CANCELED`  | `4`       | Event was cancelled        |
+
+### Update Scheduled Event
+
+```
+PATCH /guilds/:guildId/scheduled-events/:eventId
+```
+
+### Delete Scheduled Event
+
+```
+DELETE /guilds/:guildId/scheduled-events/:eventId
+```

@@ -1,0 +1,106 @@
+---
+title: Authentication
+description: The gateway supports three authentication methods depending on the type of client
+---
+
+# Authentication
+
+The gateway supports three authentication methods depending on the type of client.
+
+## User Authentication (Bearer JWT)
+
+Most endpoints require a Clerk-issued JWT passed as a Bearer token. This is the standard auth method for user-facing clients (web, mobile, desktop).
+
+```
+Authorization: Bearer <clerk_jwt>
+```
+
+The JWT is validated on every request. If the user doesn't exist in the local database yet, they are automatically provisioned from Clerk on first request.
+
+### How it works
+
+1. Your client authenticates the user through Clerk (sign-in flow).
+2. Clerk issues a short-lived JWT.
+3. Attach the JWT to every API request in the `Authorization` header.
+4. The gateway validates the JWT, extracts the user ID, and processes the request.
+
+### Token expiry
+
+Clerk JWTs are short-lived (typically 60 seconds). Your client should refresh them automatically using the Clerk SDK. Expired tokens return `401 Unauthorized`.
+
+---
+
+## Bot Authentication (Bot-Token)
+
+Bot applications use a static token for authentication. This is used for bot-specific operations like command registration and webhook callbacks.
+
+```
+Bot-Token: <bot_token>
+```
+
+### Obtaining a bot token
+
+1. Create an application via `POST /applications`.
+2. The response includes a `token` field — **this is shown only once**. Store it securely.
+3. If you lose the token, generate a new one with `POST /applications/:botId/reset-token` (this invalidates the old token immediately).
+
+### Token format
+
+Bot tokens are 64-character lowercase hex strings (32 random bytes, hex-encoded).
+
+### Which endpoints use Bot-Token?
+
+- `PUT /applications/:botId/commands` — Register commands
+- `POST /applications/:botId/guilds/:guildId/commands` — Guild-specific commands
+- `POST /webhooks/:webhookId/:webhookToken` — Interaction follow-up messages
+- `PATCH /webhooks/:webhookId/:webhookToken/messages/@original` — Edit original response
+- `DELETE /webhooks/:webhookId/:webhookToken/messages/@original` — Delete original response
+
+---
+
+## OAuth2 Authentication
+
+Third-party applications can authenticate users via the OAuth2 authorization code flow. After authorization, the application receives an access token scoped to specific permissions.
+
+```
+Authorization: Bearer <oauth_access_token>
+```
+
+OAuth2 access tokens follow the format: `olq_<64-char hex>`
+
+See the [OAuth2 guide](./oauth2.md) for the full authorization flow, scopes, and token management.
+
+---
+
+## ConnectRPC Gateway Authentication
+
+The real-time gateway authenticates via the same Bearer JWT, passed in the `token` field of the `IdentifyRequest` message:
+
+```typescript
+const stream = client.identify({
+	token: "<clerk_jwt>",
+	intents: GatewayIntents.GUILDS | GatewayIntents.GUILD_MESSAGES,
+});
+```
+
+Bots can also connect to the gateway by passing a `Bot-Token` header on the HTTP/2 request in addition to the JWT token.
+
+---
+
+## Error Responses
+
+All authentication failures return a standard error:
+
+| Status | Meaning                                                             |
+| ------ | ------------------------------------------------------------------- |
+| 401    | Missing token, expired token, or invalid token                      |
+| 403    | Valid token but insufficient permissions for the requested resource |
+
+```json
+{
+	"error": {
+		"code": "UNAUTHORIZED",
+		"message": "Authentication required. Provide a valid Bearer token."
+	}
+}
+```

@@ -1,0 +1,249 @@
+---
+title: OAuth2
+description: OAuth2 for third-party applications to access the API on behalf of users
+---
+
+# OAuth2
+
+Oliqor supports OAuth2 for third-party applications to access the API on behalf of users. This enables building external dashboards, moderation tools, analytics platforms, and other integrations.
+
+## Authorization Code Flow
+
+OAuth2 uses the standard authorization code flow:
+
+```
+1. Your app calls GET /oauth/authorize to fetch consent screen data
+2. Your client renders the consent screen and the user approves
+3. Your app calls POST /oauth/authorize to confirm approval — the server redirects with a code
+4. Your app exchanges the code for access + refresh tokens via POST /oauth/token
+5. Use the access token to make API calls on behalf of the user
+```
+
+### Step 1: Fetch Consent Screen Data
+
+Call this endpoint from your authenticated frontend (requires the user's Bearer token) to retrieve the information needed to render the consent screen:
+
+```
+GET /oauth/authorize?client_id=<app_id>&redirect_uri=<uri>&scope=<scopes>&response_type=code&state=<random>
+```
+
+| Parameter               | Required | Description                                      |
+| ----------------------- | -------- | ------------------------------------------------ |
+| `client_id`             | Yes      | Your application's bot ID                        |
+| `redirect_uri`          | Yes      | URL to redirect back to (must be pre-registered) |
+| `scope`                 | Yes      | Space-separated list of requested scopes         |
+| `response_type`         | Yes      | Must be `code`                                   |
+| `state`                 | No       | Random string to prevent CSRF attacks            |
+| `code_challenge`        | No       | PKCE challenge (for public clients)              |
+| `code_challenge_method` | No       | `S256` (required if `code_challenge` is set)     |
+
+**Response 200**:
+
+```json
+{
+	"application": { "id": "bot_abc", "name": "My Bot", "icon": null },
+	"user": { "id": "user_abc123", "username": "alice", "avatar_url": null },
+	"scopes": ["identify", "guilds"],
+	"redirect_uri": "https://myapp.com/callback",
+	"state": "xyzzy"
+}
+```
+
+### Step 2: User Approves — Submit Consent
+
+When the user clicks "Approve", POST to the same endpoint with the same parameters as a JSON body. The server generates an authorization code and redirects (302) to your `redirect_uri`:
+
+```
+POST /oauth/authorize
+```
+
+```json
+{
+	"client_id": "bot_abc",
+	"redirect_uri": "https://myapp.com/callback",
+	"scope": "identify guilds",
+	"state": "xyzzy"
+}
+```
+
+The redirect target will be:
+
+```
+https://myapp.com/callback?code=<auth_code>&state=xyzzy
+```
+
+### Step 3: Exchange Code for Tokens
+
+```
+POST /oauth/token
+```
+
+```json
+{
+	"grant_type": "authorization_code",
+	"code": "<auth_code>",
+	"redirect_uri": "https://myapp.com/callback",
+	"client_id": "bot_abc",
+	"client_secret": "<app_secret>"
+}
+```
+
+If using PKCE (recommended for public clients like SPAs/mobile apps), omit `client_secret` and include:
+
+```json
+{
+	"grant_type": "authorization_code",
+	"code": "<auth_code>",
+	"redirect_uri": "https://myapp.com/callback",
+	"client_id": "bot_abc",
+	"code_verifier": "<original_code_verifier>"
+}
+```
+
+**Response 200**:
+
+```json
+{
+	"access_token": "olq_a1b2c3d4...",
+	"token_type": "Bearer",
+	"expires_in": 604800,
+	"refresh_token": "a1b2c3d4...",
+	"scope": "identify guilds"
+}
+```
+
+| Field           | Description                                         |
+| --------------- | --------------------------------------------------- |
+| `access_token`  | Use this in `Authorization: Bearer <token>` headers |
+| `token_type`    | Always `"Bearer"`                                   |
+| `expires_in`    | Token lifetime in seconds (7 days)                  |
+| `refresh_token` | Use to get a new access token when this one expires |
+| `scope`         | Space-separated list of granted scopes              |
+
+---
+
+## Scopes
+
+Scopes control what the access token can do. Request only what you need.
+
+| Scope              | Description                                            |
+| ------------------ | ------------------------------------------------------ |
+| `identify`         | Read the user's ID, username, avatar, and display name |
+| `email`            | Read the user's email address                          |
+| `guilds`           | List guilds the user is a member of                    |
+| `guilds.join`      | Join guilds on behalf of the user                      |
+| `messages`         | Read messages in channels the user can access          |
+| `messages.write`   | Send messages on behalf of the user                    |
+| `presence`         | Read the user's presence status                        |
+| `presence.write`   | Update the user's presence status                      |
+| `activities.write` | Set the user's activity (playing, listening, etc.)     |
+| `bot`              | Bot-specific scope (for bot accounts)                  |
+
+### Scope Examples
+
+**Dashboard app** (read-only): `identify guilds`
+
+**Moderation tool**: `identify guilds messages`
+
+**Bot with presence**: `identify bot presence.write activities.write`
+
+---
+
+## Refreshing Tokens
+
+Access tokens expire after 7 days. Use the refresh token to get new ones without re-authorizing the user.
+
+```
+POST /oauth/token
+```
+
+```json
+{
+	"grant_type": "refresh_token",
+	"refresh_token": "<refresh_token>",
+	"client_id": "bot_abc",
+	"client_secret": "<app_secret>"
+}
+```
+
+**Response 200**: Same format as the initial token response. The old refresh token is invalidated — use the new one from the response.
+
+Refresh tokens expire after 30 days. If the refresh token has expired, the user must re-authorize.
+
+---
+
+## Revoking Tokens
+
+When a user disconnects your app, revoke their tokens:
+
+```
+POST /oauth/revoke
+```
+
+```json
+{
+	"token": "<access_or_refresh_token>",
+	"client_id": "bot_abc",
+	"client_secret": "<app_secret>",
+	"token_type_hint": "access_token"
+}
+```
+
+| `token_type_hint` | Description            |
+| ----------------- | ---------------------- |
+| `access_token`    | Revoke an access token |
+| `refresh_token`   | Revoke a refresh token |
+
+Returns 200 regardless of whether the token was found (per RFC 7009).
+
+---
+
+## Get Current Authorization
+
+```
+GET /oauth/@me
+```
+
+Returns information about the current OAuth2 authorization. Requires the `identify` scope.
+
+**Response 200**:
+
+```json
+{
+	"id": "user_abc123",
+	"username": "alice",
+	"global_name": "Alice",
+	"avatar": "https://cdn.example.com/avatars/abc.png",
+	"banner": null,
+	"accent_color": null,
+	"bio": null,
+	"pronouns": null,
+	"bot": false,
+	"system": false,
+	"flags": 0,
+	"public_flags": 0
+}
+```
+
+If the `email` scope was granted, the response also includes `"email": "alice@example.com"`.
+
+---
+
+## Security Best Practices
+
+1. **Always validate the `state` parameter** to prevent CSRF attacks.
+2. **Use PKCE** for public clients (SPAs, mobile apps, CLI tools) that can't securely store a client secret.
+3. **Store tokens securely** — never expose them in URLs, localStorage, or client-side code.
+4. **Request minimal scopes** — only ask for what your app actually needs.
+5. **Revoke tokens** when the user disconnects your app.
+6. **Handle token expiry gracefully** — refresh tokens before they expire, and handle 401 responses by re-authorizing.
+
+---
+
+## Token Formats
+
+| Token Type    | Format                | Lifetime   |
+| ------------- | --------------------- | ---------- |
+| Access token  | `olq_` + 64 hex chars | 7 days     |
+| Refresh token | 64 hex chars          | 30 days    |
+| Auth code     | 64 hex chars          | 10 minutes |

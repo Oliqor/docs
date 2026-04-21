@@ -6,6 +6,13 @@ export function baseOptions(): BaseLayoutProps {
     nav: {
       // JSX supported
       title: appName,
+      links: [
+        {
+          text: 'Documentation',
+          url: '/docs',
+          active: 'nested',
+        },
+      ],
     },
     githubUrl: `https://github.com/${gitConfig.user}/${gitConfig.repo}`,
   };

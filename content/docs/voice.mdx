@@ -1,0 +1,320 @@
+---
+title: Voice
+description: Voice in Oliqor is a two-phase system for real-time audio and video communication
+---
+
+# Voice
+
+Voice in Oliqor is a two-phase system: REST endpoints manage voice state and issue tokens, and a WebSocket connection handles WebRTC signaling for peer-to-peer audio/video.
+
+## How Voice Works
+
+```
+1. Client calls PUT /channels/:channelId/voice (REST)
+   → Receives a voice token and WebSocket endpoint
+
+2. Client connects to wss://gw.oliqor.lol/voice (WebSocket)
+   → Sends "identify" with the token
+
+3. Server sends "ready" with peer info
+   → Client exchanges SDP offers/answers and ICE candidates
+
+4. Peer-to-peer audio/video flows directly between clients
+```
+
+The gateway also emits `VOICE_STATE_UPDATE` and `VOICE_SERVER_UPDATE` events over the ConnectRPC stream so all clients can track who is in which channel.
+
+---
+
+## REST Endpoints
+
+### Join Voice Channel
+
+```
+PUT /channels/:channelId/voice
+```
+
+Joins a voice channel. Only channels of type `voice` (2) or `stage` (13) are accepted. If the channel has a `user_limit` and is full, returns 403.
+
+**Request body** (optional):
+
+```json
+{
+	"selfMute": false,
+	"selfDeaf": false,
+	"selfVideo": false
+}
+```
+
+**Response 200**:
+
+```json
+{
+	"user_id": "user_abc123",
+	"channel_id": "ch_voice_1",
+	"guild_id": "guild_abc",
+	"session_id": "sess_abc",
+	"token": "<voice_token>",
+	"endpoint": "wss://gw.oliqor.lol/voice",
+	"self_mute": false,
+	"self_deaf": false,
+	"self_video": false
+}
+```
+
+**Gateway events fired**:
+
+- `VOICE_STATE_UPDATE` — broadcast to the guild (so other clients see you join)
+- `VOICE_SERVER_UPDATE` — sent to your user stream (contains the token and endpoint)
+
+Use the `token` and `endpoint` to establish the WebSocket connection.
+
+---
+
+### Update Voice State
+
+```
+PATCH /channels/:channelId/voice
+```
+
+Updates your mute, deaf, video, or stream state while connected.
+
+**Request body** — all fields optional:
+
+```json
+{
+	"selfMute": true,
+	"selfDeaf": false,
+	"selfVideo": true,
+	"selfStream": false
+}
+```
+
+Fires a `VOICE_STATE_UPDATE` gateway event.
+
+---
+
+### Leave Voice Channel
+
+```
+DELETE /channels/:channelId/voice
+```
+
+Leaves the voice channel, cleans up voice state, and invalidates the session. Fires a `VOICE_STATE_UPDATE` event with `channel_id: null`.
+
+---
+
+### List Voice Channel Users
+
+```
+GET /channels/:channelId/voice
+```
+
+Returns all users currently in the voice channel with their full voice state.
+
+**Response 200**:
+
+```json
+[
+	{
+		"user_id": "user_abc123",
+		"channel_id": "ch_voice_1",
+		"guild_id": "guild_abc",
+		"session_id": "sess_abc",
+		"self_mute": false,
+		"self_deaf": false,
+		"self_video": true,
+		"self_stream": false,
+		"mute": false,
+		"deaf": false,
+		"suppress": false,
+		"request_to_speak_timestamp": null
+	}
+]
+```
+
+---
+
+## Moderation Controls
+
+These endpoints require moderator permissions and operate on other users in the voice channel.
+
+### Move Voice Member
+
+```
+POST /channels/:channelId/voice/move
+```
+
+Requires `MOVE_MEMBERS` permission. Moves a user from one voice channel to another.
+
+```json
+{
+	"userId": "user_def456",
+	"toChannelId": "ch_voice_2"
+}
+```
+
+The moved user receives a new `VOICE_SERVER_UPDATE` event with updated connection details.
+
+---
+
+### Server Mute User
+
+```
+POST /channels/:channelId/voice/server-mute
+```
+
+Requires `MUTE_MEMBERS` permission. Server-muting prevents the user from transmitting audio, regardless of their own mute setting.
+
+```json
+{
+	"userId": "user_def456",
+	"mute": true
+}
+```
+
+Fires a `VOICE_STATE_UPDATE` gateway event with `mute: true`.
+
+---
+
+### Server Deafen User
+
+```
+POST /channels/:channelId/voice/server-deaf
+```
+
+Requires `DEAFEN_MEMBERS` permission. Server-deafening prevents the user from hearing audio.
+
+```json
+{
+	"userId": "user_def456",
+	"deaf": true
+}
+```
+
+---
+
+### Force-Disconnect User
+
+```
+POST /channels/:channelId/voice/disconnect
+```
+
+Requires `MOVE_MEMBERS` permission. Removes the user from the voice channel entirely.
+
+```json
+{
+	"userId": "user_def456"
+}
+```
+
+---
+
+## Voice State Object
+
+The voice state object represents a user's current state in a voice channel:
+
+| Field                        | Type           | Description                                       |
+| ---------------------------- | -------------- | ------------------------------------------------- |
+| `user_id`                    | string         | The user's ID                                     |
+| `channel_id`                 | string \| null | The voice channel ID (null = not in voice)        |
+| `guild_id`                   | string         | The guild ID                                      |
+| `session_id`                 | string         | Voice session identifier                          |
+| `self_mute`                  | boolean        | User has muted themselves                         |
+| `self_deaf`                  | boolean        | User has deafened themselves                      |
+| `self_video`                 | boolean        | User has their camera on                          |
+| `self_stream`                | boolean        | User is screen sharing                            |
+| `mute`                       | boolean        | User is server-muted by a moderator               |
+| `deaf`                       | boolean        | User is server-deafened by a moderator            |
+| `suppress`                   | boolean        | User is suppressed (in stage channels)            |
+| `request_to_speak_timestamp` | string \| null | When the user requested to speak (stage channels) |
+
+---
+
+## WebSocket Signaling Protocol
+
+After obtaining a voice token via `PUT /channels/:channelId/voice`, connect to the WebSocket endpoint.
+
+### Connection
+
+```
+wss://gw.oliqor.lol/voice
+```
+
+### Message Flow
+
+**1. Client → Server: Identify**
+
+```json
+{
+	"op": "identify",
+	"token": "<voice_token>",
+	"userId": "user_abc123",
+	"channelId": "ch_voice_1"
+}
+```
+
+**2. Server → Client: Ready**
+
+```json
+{
+	"op": "ready",
+	"userId": "user_abc123",
+	"channelId": "ch_voice_1",
+	"peers": ["user_def456", "user_ghi789"]
+}
+```
+
+**3. Client ↔ Server: SDP Exchange**
+
+```json
+{
+	"op": "offer",
+	"targetUserId": "user_def456",
+	"sdp": "<SDP offer string>"
+}
+```
+
+```json
+{
+	"op": "answer",
+	"targetUserId": "user_abc123",
+	"sdp": "<SDP answer string>"
+}
+```
+
+**4. Client ↔ Server: ICE Candidates**
+
+```json
+{
+	"op": "ice_candidate",
+	"targetUserId": "user_def456",
+	"candidate": "<ICE candidate string>"
+}
+```
+
+**5. Server → Client: Peer Join/Leave**
+
+```json
+{
+	"op": "peer_join",
+	"userId": "user_xyz"
+}
+```
+
+```json
+{
+	"op": "peer_leave",
+	"userId": "user_xyz"
+}
+```
+
+**6. Server → Client: Server Mute**
+
+```json
+{
+	"op": "server_mute",
+	"userId": "user_abc123",
+	"mute": true
+}
+```
