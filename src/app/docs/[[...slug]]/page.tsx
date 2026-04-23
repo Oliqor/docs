@@ -12,6 +12,21 @@ import { getMDXComponents } from '@/components/mdx';
 import type { Metadata } from 'next';
 import { createRelativeLink } from 'fumadocs-ui/mdx';
 import { gitConfig } from '@/lib/shared';
+import { ArrowUp } from 'lucide-react';
+
+function TOCFooter() {
+  return (
+    <div className="mt-4 pt-3 border-t border-fd-border/60">
+      <a
+        href="#"
+        className="inline-flex items-center gap-1.5 text-xs text-fd-muted-foreground hover:text-fd-primary transition-colors"
+      >
+        <ArrowUp className="size-3" />
+        Back to top
+      </a>
+    </div>
+  );
+}
 
 export default async function Page(props: PageProps<'/docs/[[...slug]]'>) {
   const params = await props.params;
@@ -22,7 +37,17 @@ export default async function Page(props: PageProps<'/docs/[[...slug]]'>) {
   const markdownUrl = getPageMarkdownUrl(page).url;
 
   return (
-    <DocsPage toc={page.data.toc} full={page.data.full}>
+    <DocsPage
+      toc={page.data.toc}
+      full={page.data.full}
+      tableOfContent={{
+        style: 'clerk',
+        footer: <TOCFooter />,
+      }}
+      tableOfContentPopover={{
+        style: 'clerk',
+      }}
+    >
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription className="mb-0">{page.data.description}</DocsDescription>
       <div className="flex flex-row gap-2 items-center border-b pb-6">

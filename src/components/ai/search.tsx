@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { Bot, Loader2, RefreshCw, SearchIcon, Send, Sparkles, Square, X } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import { buttonVariants } from '../ui/button';
@@ -447,13 +448,16 @@ export function AISearchTrigger({
   ...props
 }: ComponentProps<'button'> & { position?: 'default' | 'float' }) {
   const { open, setOpen } = useAISearchContext();
+  const [mounted, setMounted] = useState(false);
 
-  return (
+  useEffect(() => { setMounted(true); }, []);
+
+  const button = (
     <button
       data-state={open ? 'open' : 'closed'}
       className={cn(
         position === 'float' && [
-          'fixed bottom-4 gap-2 inset-e-[calc(--spacing(4)+var(--removed-body-scroll-bar-size,0))] shadow-lg z-20 transition-[translate,opacity]',
+          'fixed bottom-4 right-4 gap-2 shadow-lg z-[9999] transition-[translate,opacity]',
           open && 'translate-y-10 opacity-0',
         ],
         className,
@@ -464,6 +468,12 @@ export function AISearchTrigger({
       {props.children}
     </button>
   );
+
+  if (position === 'float') {
+    return mounted ? createPortal(button, document.body) : null;
+  }
+
+  return button;
 }
 
 // ─── Provider / hooks ─────────────────────────────────────────────────────────
