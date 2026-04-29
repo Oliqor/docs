@@ -41,7 +41,7 @@ export default function Layout({ children }: LayoutProps<'/docs'>) {
           )}
         >
           <MessageCircleIcon className="size-4" />
-          Ask AI
+          Ask Quin
         </AISearchTrigger>
       </AISearch>
       {children}
