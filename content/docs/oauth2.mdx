@@ -12,10 +12,10 @@ Oliqor supports OAuth2 for third-party applications to access the API on behalf 
 OAuth2 uses the standard authorization code flow:
 
 ```
-1. Your app calls GET /oauth/authorize to fetch consent screen data
+1. Your app calls GET /v1/oauth/authorize to fetch consent screen data
 2. Your client renders the consent screen and the user approves
-3. Your app calls POST /oauth/authorize to confirm approval — the server redirects with a code
-4. Your app exchanges the code for access + refresh tokens via POST /oauth/token
+3. Your app calls POST /v1/oauth/authorize to confirm approval — the server redirects with a code
+4. Your app exchanges the code for access + refresh tokens via POST /v1/oauth/token
 5. Use the access token to make API calls on behalf of the user
 ```
 
@@ -24,15 +24,15 @@ OAuth2 uses the standard authorization code flow:
 Call this endpoint from your authenticated frontend (requires the user's Bearer token) to retrieve the information needed to render the consent screen:
 
 ```
-GET /oauth/authorize?client_id=<app_id>&redirect_uri=<uri>&scope=<scopes>&response_type=code&state=<random>
+GET /v1/oauth/authorize?client_id=<app_id>&redirect_uri=<uri>&scope=<scopes>&response_type=code&state=<random>
 ```
 
 | Parameter               | Required | Description                                      |
 | ----------------------- | -------- | ------------------------------------------------ |
 | `client_id`             | Yes      | Your application's bot ID                        |
 | `redirect_uri`          | Yes      | URL to redirect back to (must be pre-registered) |
-| `scope`                 | Yes      | Space-separated list of requested scopes         |
 | `response_type`         | Yes      | Must be `code`                                   |
+| `scope`                 | No       | Space-separated list of requested scopes         |
 | `state`                 | No       | Random string to prevent CSRF attacks            |
 | `code_challenge`        | No       | PKCE challenge (for public clients)              |
 | `code_challenge_method` | No       | `S256` (required if `code_challenge` is set)     |
@@ -51,10 +51,10 @@ GET /oauth/authorize?client_id=<app_id>&redirect_uri=<uri>&scope=<scopes>&respon
 
 ### Step 2: User Approves — Submit Consent
 
-When the user clicks "Approve", POST to the same endpoint with the same parameters as a JSON body. The server generates an authorization code and redirects (302) to your `redirect_uri`:
+When the user clicks "Approve", POST to the same endpoint with the authorization parameters as a JSON body. The server generates an authorization code and redirects (302) to your `redirect_uri`:
 
 ```
-POST /oauth/authorize
+POST /v1/oauth/authorize
 ```
 
 ```json
@@ -66,7 +66,16 @@ POST /oauth/authorize
 }
 ```
 
-The redirect target will be:
+**Response 200**:
+
+```json
+{
+	"code": "<auth_code>",
+	"redirect_uri": "https://myapp.com/callback"
+}
+```
+
+The client is also redirected to:
 
 ```
 https://myapp.com/callback?code=<auth_code>&state=xyzzy
@@ -75,7 +84,7 @@ https://myapp.com/callback?code=<auth_code>&state=xyzzy
 ### Step 3: Exchange Code for Tokens
 
 ```
-POST /oauth/token
+POST /v1/oauth/token
 ```
 
 ```json
@@ -116,7 +125,7 @@ If using PKCE (recommended for public clients like SPAs/mobile apps), omit `clie
 | --------------- | --------------------------------------------------- |
 | `access_token`  | Use this in `Authorization: Bearer <token>` headers |
 | `token_type`    | Always `"Bearer"`                                   |
-| `expires_in`    | Token lifetime in seconds (7 days)                  |
+| `expires_in`    | Token lifetime in seconds                           |
 | `refresh_token` | Use to get a new access token when this one expires |
 | `scope`         | Space-separated list of granted scopes              |
 
@@ -151,10 +160,10 @@ Scopes control what the access token can do. Request only what you need.
 
 ## Refreshing Tokens
 
-Access tokens expire after 7 days. Use the refresh token to get new ones without re-authorizing the user.
+Use the refresh token to get new access tokens without re-authorizing the user.
 
 ```
-POST /oauth/token
+POST /v1/oauth/token
 ```
 
 ```json
@@ -168,16 +177,12 @@ POST /oauth/token
 
 **Response 200**: Same format as the initial token response. The old refresh token is invalidated — use the new one from the response.
 
-Refresh tokens expire after 30 days. If the refresh token has expired, the user must re-authorize.
-
 ---
 
 ## Revoking Tokens
 
-When a user disconnects your app, revoke their tokens:
-
 ```
-POST /oauth/revoke
+POST /v1/oauth/revoke
 ```
 
 ```json
@@ -189,22 +194,24 @@ POST /oauth/revoke
 }
 ```
 
-| `token_type_hint` | Description            |
-| ----------------- | ---------------------- |
-| `access_token`    | Revoke an access token |
-| `refresh_token`   | Revoke a refresh token |
+| Field              | Required | Description                       |
+| ------------------ | -------- | --------------------------------- |
+| `token`            | Yes      | The token to revoke               |
+| `client_id`        | Yes      | Your application's client ID      |
+| `client_secret`    | Yes      | Your application's client secret  |
+| `token_type_hint`  | No       | `access_token` or `refresh_token` |
 
-Returns 200 regardless of whether the token was found (per RFC 7009).
+Returns `{ "revoked": true }` — 200 regardless of whether the token was found (per RFC 7009).
 
 ---
 
-## Get Current Authorization
+## Get Current OAuth User
 
 ```
-GET /oauth/@me
+GET /v1/oauth/@me
 ```
 
-Returns information about the current OAuth2 authorization. Requires the `identify` scope.
+Returns the current user's info based on the OAuth access token. Requires the `identify` scope.
 
 **Response 200**:
 
@@ -212,20 +219,19 @@ Returns information about the current OAuth2 authorization. Requires the `identi
 {
 	"id": "user_abc123",
 	"username": "alice",
-	"global_name": "Alice",
-	"avatar": "https://cdn.example.com/avatars/abc.png",
-	"banner": null,
-	"accent_color": null,
-	"bio": null,
-	"pronouns": null,
-	"bot": false,
-	"system": false,
-	"flags": 0,
-	"public_flags": 0
+	"display_name": "Alice",
+	"avatar_url": "https://cdn.example.com/avatars/abc.png",
+	"email": "alice@example.com"
 }
 ```
 
-If the `email` scope was granted, the response also includes `"email": "alice@example.com"`.
+| Field          | Description                                    |
+| -------------- | ---------------------------------------------- |
+| `id`           | User ID                                        |
+| `username`     | Unique username                                |
+| `display_name` | Display name (null if not set)                 |
+| `avatar_url`   | Avatar image URL (null if not set)             |
+| `email`        | Email address (only if `email` scope granted)  |
 
 ---
 

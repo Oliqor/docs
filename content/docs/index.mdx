@@ -25,7 +25,9 @@ All REST responses use **Discord-compatible snake_case** field names. The Connec
 | ----------- | ------------------------------- | ---------------------------------- |
 | Production  | `https://gw.oliqor.lol`         | `https://msggw.oliqor.lol`         |
 | Staging     | `https://gw-staging.oliqor.lol` | `https://msggw-staging.oliqor.lol` |
-| Local dev   | `http://localhost:$PORT`        | `http://localhost:$GRPC_PORT`      |
+| Local dev   | `http://localhost:3000/v1`      | `http://localhost:$GRPC_PORT`      |
+
+All REST endpoints are prefixed with `/v1`.
 
 ## Interactive API Explorer
 
@@ -33,20 +35,44 @@ A Swagger UI is served at **`/swagger`** on the REST server. The OpenAPI spec is
 
 Prometheus metrics are available at **`/metrics`** in standard text format for scraping.
 
+## Rate Limiting
+
+All endpoints are rate-limited. When rate-limited, responses include:
+
+- `X-RateLimit-Limit` — Max requests per window
+- `X-RateLimit-Remaining` — Remaining requests
+- `X-RateLimit-Reset` — Unix timestamp when the limit resets
+- `Retry-After` — Seconds to wait (only on 429 responses)
+
+## Error Format
+
+All errors follow a consistent structure:
+
+```json
+{
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable description"
+  }
+}
+```
+
+Common error codes: `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `MISSING_PERMISSIONS`, `TOO_MANY_REQUESTS`, `VALIDATION_ERROR`, `INTERNAL_ERROR`.
+
 ## Quick Start
 
 ### 1. Authenticate
 
-Obtain a Clerk JWT from your auth flow and attach it to every request:
+Register or log in to obtain a session token, then attach it to every request:
 
 ```
-Authorization: Bearer <clerk_jwt>
+Authorization: Bearer <token>
 ```
 
 ### 2. Fetch your profile
 
 ```http
-GET /users/@me
+GET /v1/users/@me
 Authorization: Bearer <token>
 ```
 
@@ -58,12 +84,12 @@ import { createConnectTransport } from "@connectrpc/connect-node";
 import { GatewayService } from "./gen/gateway_connect";
 
 const transport = createConnectTransport({
-	baseUrl: "https://gw.oliqor.lol",
+	baseUrl: "https://msggw.oliqor.lol",
 });
 const client = createClient(GatewayService, transport);
 
 const stream = client.identify({
-	token: "<clerk_jwt>",
+	token: "<token>",
 	intents: GatewayIntents.GUILDS | GatewayIntents.GUILD_MESSAGES,
 });
 
@@ -75,7 +101,7 @@ for await (const event of stream) {
 ### 4. Send a message
 
 ```http
-POST /channels/<channelId>/messages
+POST /v1/channels/<channelId>/messages
 Authorization: Bearer <token>
 Content-Type: application/json
 

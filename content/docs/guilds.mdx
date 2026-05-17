@@ -14,15 +14,10 @@ A **guild** is the top-level grouping in Oliqor (equivalent to a "server" in Dis
 	"id": "guild_abc",
 	"name": "My Guild",
 	"icon": "https://cdn.example.com/icons/abc.png",
-	"splash": null,
-	"banner": null,
 	"description": "A place to hang out",
 	"owner_id": "user_abc123",
-	"features": [],
-	"vanity_url_code": null,
 	"system_channel_id": "ch_general",
 	"system_channel_flags": 0,
-	"rules_channel_id": null,
 	"verification_level": 0,
 	"default_message_notifications": 0,
 	"explicit_content_filter": 0,
@@ -34,13 +29,31 @@ A **guild** is the top-level grouping in Oliqor (equivalent to a "server" in Dis
 	"afk_channel_id": null,
 	"afk_timeout": 300,
 	"max_members": 500000,
-	"member_count": 42,
-	"roles": [],
-	"channels": [],
-	"members": [],
-	"emojis": []
+	"roles": []
 }
 ```
+
+| Field                            | Type           | Description                                            |
+| -------------------------------- | -------------- | ------------------------------------------------------ |
+| `id`                             | string         | Guild ID                                               |
+| `name`                           | string         | Guild name                                             |
+| `icon`                           | string \| null | Icon image URL                                         |
+| `description`                    | string \| null | Guild description                                      |
+| `owner_id`                       | string         | User ID of the guild owner                             |
+| `afk_channel_id`                 | string \| null | Voice channel ID for AFK members                       |
+| `afk_timeout`                    | number         | Seconds before moving to AFK channel                   |
+| `verification_level`             | number         | Verification level (0–4)                               |
+| `default_message_notifications`  | number         | Default notification setting (0 = all, 1 = mentions)  |
+| `explicit_content_filter`        | number         | Explicit content filter level (0–2)                    |
+| `mfa_level`                      | number         | MFA requirement for moderation (0 = off, 1 = required) |
+| `system_channel_id`              | string \| null | Channel for system messages                            |
+| `system_channel_flags`           | number         | System channel flags bitfield                          |
+| `preferred_locale`               | string         | Preferred locale (e.g., `"en-US"`)                     |
+| `premium_tier`                   | number         | Boost tier (0–3)                                       |
+| `premium_subscription_count`     | number         | Number of active boosts                                |
+| `nsfw_level`                     | number         | NSFW level (0–3)                                       |
+| `max_members`                    | number         | Maximum member count                                   |
+| `roles`                          | Role[]         | List of guild roles                                    |
 
 ---
 
@@ -49,26 +62,18 @@ A **guild** is the top-level grouping in Oliqor (equivalent to a "server" in Dis
 ### Create Guild
 
 ```
-POST /guilds
+POST /v1/guilds
 ```
 
-Creates a new guild. A `#general` text channel and an `@everyone` role with [default permissions](./permissions.md#default-member-permissions) are created automatically. The creator becomes the owner.
+Creates a new guild. A `#general` text channel and an `@everyone` role with [default permissions](./permissions#default-member-permissions) are created automatically. The creator becomes the owner.
 
 **Request body**:
 
-```json
-{
-	"name": "My Guild",
-	"description": "A place to chat",
-	"icon": "https://example.com/icon.png"
-}
-```
-
-| Field         | Type   | Constraints   | Required |
-| ------------- | ------ | ------------- | -------- |
-| `name`        | string | 1–100 chars   | Yes      |
-| `description` | string | Max 500 chars | No       |
-| `icon`        | string | URL           | No       |
+| Field         | Type   | Required | Constraints   |
+| ------------- | ------ | -------- | ------------- |
+| `name`        | string | Yes      | 1–100 chars   |
+| `description` | string | No       | Max 500 chars |
+| `icon`        | string | No       | URL           |
 
 **Response 200**: Full [guild object](#guild-object).
 
@@ -77,30 +82,28 @@ Creates a new guild. A `#general` text channel and an `@everyone` role with [def
 ### Get Guild
 
 ```
-GET /guilds/:guildId
+GET /v1/guilds/{guildId}
 ```
 
-Returns the full guild object including channels (ordered by position), roles, members, and emojis.
+Returns the full guild object including roles.
 
 ---
 
 ### Update Guild
 
 ```
-PATCH /guilds/:guildId
+PATCH /v1/guilds/{guildId}
 ```
 
 Requires `MANAGE_COMMUNITY` permission. All fields optional.
 
 **Request body**:
 
-```json
-{
-	"name": "New Name",
-	"description": "Updated description",
-	"icon": "https://example.com/new-icon.png"
-}
-```
+| Field         | Type   | Description         |
+| ------------- | ------ | ------------------- |
+| `name`        | string | Guild name          |
+| `description` | string | Guild description   |
+| `icon`        | string | Icon URL            |
 
 Fires a `GUILD_UPDATE` gateway event. Creates an audit log entry.
 
@@ -109,12 +112,118 @@ Fires a `GUILD_UPDATE` gateway event. Creates an audit log entry.
 ### Delete Guild
 
 ```
-DELETE /guilds/:guildId
+DELETE /v1/guilds/{guildId}
 ```
 
-Owner only. Permanently deletes the guild and **all** associated data (channels, messages, roles, members, bans, etc.). This action is irreversible.
+Owner only. Permanently deletes the guild and all associated data. This action is irreversible.
 
 Fires a `GUILD_DELETE` gateway event.
+
+---
+
+### Get Vanity URL
+
+```
+GET /v1/guilds/{guildId}/vanity-url
+```
+
+Returns the guild's vanity URL code and current use count.
+
+**Response 200**:
+
+```json
+{
+	"code": "my-guild",
+	"uses": 42
+}
+```
+
+---
+
+### Set Vanity URL
+
+```
+PATCH /v1/guilds/{guildId}/vanity-url
+```
+
+Requires `MANAGE_COMMUNITY` permission.
+
+**Request body**:
+
+| Field  | Type   | Required | Description         |
+| ------ | ------ | -------- | ------------------- |
+| `code` | string | Yes      | New vanity URL code |
+
+---
+
+### Get Widget Settings
+
+```
+GET /v1/guilds/{guildId}/widget
+```
+
+Requires `MANAGE_COMMUNITY` permission.
+
+**Response 200**:
+
+```json
+{
+	"enabled": false,
+	"channelId": null
+}
+```
+
+---
+
+### Update Widget Settings
+
+```
+PATCH /v1/guilds/{guildId}/widget
+```
+
+Requires `MANAGE_COMMUNITY` permission.
+
+**Request body**:
+
+| Field       | Type    | Description                          |
+| ----------- | ------- | ------------------------------------ |
+| `enabled`   | boolean | Enable or disable the widget         |
+| `channelId` | string  | Channel to invite to from the widget |
+
+---
+
+### Prune Members
+
+```
+GET /v1/guilds/{guildId}/prune
+```
+
+Preview how many members would be pruned. Requires `KICK_MEMBERS` permission.
+
+**Query parameters**:
+
+| Parameter      | Type   | Description                                        |
+| -------------- | ------ | -------------------------------------------------- |
+| `days`         | number | Days of inactivity threshold                       |
+| `includeRoles` | string | Comma-separated role IDs to include in prune count |
+
+**Response 200**: `{ "pruned": 12 }`
+
+```
+POST /v1/guilds/{guildId}/prune
+```
+
+Execute member pruning. Requires `KICK_MEMBERS` permission.
+
+**Request body**:
+
+| Field               | Type    | Description                                  |
+| ------------------- | ------- | -------------------------------------------- |
+| `days`              | number  | Days of inactivity (default: 7)              |
+| `computePruneCount` | boolean | Whether to return pruned count (can be slow) |
+| `reason`            | string  | Audit log reason                             |
+
+**Response 200**: `{ "pruned": 12 }` (or `null` if `computePruneCount` is false)
 
 ---
 
@@ -131,30 +240,32 @@ Fires a `GUILD_DELETE` gateway event.
 		"avatar": "https://cdn.example.com/avatars/abc.png"
 	},
 	"nick": "ali",
-	"avatar": "https://cdn.example.com/guild-avatars/abc.png",
+	"avatar": null,
 	"roles": ["role_mod", "role_vip"],
 	"joined_at": "2024-01-01T00:00:00.000Z",
 	"flags": 0,
-	"pending": false
+	"pending": false,
+	"member_id": "member_abc"
 }
 ```
 
-| Field       | Type           | Description                                                    |
-| ----------- | -------------- | -------------------------------------------------------------- |
-| `user`      | User object    | The underlying user (may be omitted in some contexts)          |
-| `nick`      | string \| null | Guild-specific nickname                                        |
-| `avatar`    | string \| null | Guild-specific avatar URL                                      |
-| `roles`     | string[]       | Array of role IDs the member has                               |
-| `joined_at` | string         | ISO 8601 timestamp of when they joined                         |
-| `flags`     | number         | Member flags bitfield                                          |
-| `pending`   | boolean        | Whether the member has passed the guild's membership screening |
+| Field       | Type           | Description                                           |
+| ----------- | -------------- | ----------------------------------------------------- |
+| `user`      | User object    | The underlying user (may be omitted in some contexts) |
+| `nick`      | string \| null | Guild-specific nickname                               |
+| `avatar`    | string \| null | Guild-specific avatar URL                             |
+| `roles`     | string[]       | Array of role IDs the member has                      |
+| `joined_at` | string         | ISO 8601 timestamp of when they joined                |
+| `flags`     | number         | Member flags bitfield                                 |
+| `pending`   | boolean        | Whether the member has passed membership screening    |
+| `member_id` | string         | Membership record ID                                  |
 
 ---
 
 ### List Guild Members
 
 ```
-GET /guilds/:guildId/members
+GET /v1/guilds/{guildId}/members
 ```
 
 **Query parameters**:
@@ -168,84 +279,153 @@ GET /guilds/:guildId/members
 
 ---
 
-### Get Guild Member
+### Search Members
 
 ```
-GET /guilds/:guildId/members/:userId
+GET /v1/guilds/{guildId}/members/search
 ```
 
-Returns a single member by user ID.
+Search for members by username or nickname.
+
+**Query parameters**:
+
+| Parameter | Type   | Required | Description               |
+| --------- | ------ | -------- | ------------------------- |
+| `query`   | string | Yes      | Search query              |
+| `limit`   | number | No       | Max results               |
 
 ---
 
-### Get Own Member
+### Get Own Membership
 
 ```
-GET /guilds/:guildId/members/@me
+GET /v1/guilds/{guildId}/members/@me
 ```
 
-Returns the authenticated user's member object in the guild, including computed permissions.
+Returns the authenticated user's member object in the guild.
+
+---
+
+### Get My Permissions
+
+```
+GET /v1/guilds/{guildId}/members/@me/permissions
+```
+
+Returns the computed permission bitfield for the authenticated user in the guild.
+
+**Response 200**:
+
+```json
+{
+	"permissions": "104324673",
+	"isAdministrator": false
+}
+```
 
 ---
 
 ### Update Own Member Profile
 
 ```
-PATCH /guilds/:guildId/members/@me
+PATCH /v1/guilds/{guildId}/members/@me
 ```
 
 Update your own nickname and per-guild avatar.
 
 **Request body** — all fields optional:
 
-```json
-{
-	"nick": "my-nickname",
-	"avatar": "https://example.com/guild-avatar.png"
-}
-```
+| Field    | Type           | Description           |
+| -------- | -------------- | --------------------- |
+| `nick`   | string \| null | Guild nickname        |
+| `avatar` | string \| null | Guild-specific avatar |
 
 Set to `null` to clear. Fires a `GUILD_MEMBER_UPDATE` gateway event.
+
+---
+
+### Join Guild
+
+```
+POST /v1/guilds/{guildId}/members
+```
+
+Join a public guild directly (without invite).
+
+---
+
+### Leave Guild
+
+```
+DELETE /v1/guilds/{guildId}/members/@me
+```
+
+Leaves the guild. You cannot leave a guild you own — delete it instead.
+
+---
+
+### Get Guild Member
+
+```
+GET /v1/guilds/{guildId}/members/{memberId}
+```
+
+Returns a single member by their membership ID.
 
 ---
 
 ### Update Guild Member
 
 ```
-PATCH /guilds/:guildId/members/:userId
+PATCH /v1/guilds/{guildId}/members/{memberId}
 ```
-
-Requires `MANAGE_ROLES` or `KICK_MEMBERS` permission depending on the action.
 
 **Request body** — all fields optional:
 
-```json
-{
-	"nick": "new-nick",
-	"channelId": "ch_voice_2",
-	"mute": true,
-	"deaf": false
-}
-```
-
-| Field       | Permission Required | Description                                              |
-| ----------- | ------------------- | -------------------------------------------------------- |
-| `nick`      | `MANAGE_ROLES`      | Set the member's nickname                                |
-| `channelId` | `MOVE_MEMBERS`      | Move member to a voice channel (or `null` to disconnect) |
-| `mute`      | `MUTE_MEMBERS`      | Server-mute in voice                                     |
-| `deaf`      | `DEAFEN_MEMBERS`    | Server-deafen in voice                                   |
+| Field      | Type           | Description              |
+| ---------- | -------------- | ------------------------ |
+| `nickname` | string \| null | Set the member's nickname |
+| `roles`    | string[]       | Set the member's roles   |
 
 ---
 
-### Remove Guild Member (Kick)
+### Kick Member
 
 ```
-DELETE /guilds/:guildId/members/:userId
+DELETE /v1/guilds/{guildId}/members/{memberId}
 ```
 
-Requires `KICK_MEMBERS` permission. Removes the member from the guild. They can rejoin via invite (unlike a ban).
+Requires `KICK_MEMBERS` permission. Fires a `GUILD_MEMBER_REMOVE` gateway event. Creates an audit log entry.
 
-Fires a `GUILD_MEMBER_REMOVE` gateway event. Creates an audit log entry.
+---
+
+### Add Role to Member
+
+```
+PUT /v1/guilds/{guildId}/members/{memberId}/roles/{roleId}
+```
+
+Requires `MANAGE_ROLES` permission.
+
+**Response 200**:
+
+```json
+{
+	"memberId": "member_abc",
+	"roleId": "role_mod",
+	"roles": ["role_mod", "role_vip"]
+}
+```
+
+---
+
+### Remove Role from Member
+
+```
+DELETE /v1/guilds/{guildId}/members/{memberId}/roles/{roleId}
+```
+
+Requires `MANAGE_ROLES` permission.
 
 ---
 
@@ -259,8 +439,6 @@ Fires a `GUILD_MEMBER_REMOVE` gateway event. Creates an audit log entry.
 	"name": "Moderator",
 	"color": 3447003,
 	"hoist": true,
-	"icon": null,
-	"unicode_emoji": null,
 	"position": 2,
 	"permissions": "104324673",
 	"managed": false,
@@ -275,7 +453,7 @@ Fires a `GUILD_MEMBER_REMOVE` gateway event. Creates an audit log entry.
 | `color`       | number  | Integer color value (0 = no color)                                    |
 | `hoist`       | boolean | Whether this role is displayed separately in the member sidebar       |
 | `position`    | number  | Position in the role hierarchy (higher = more powerful)               |
-| `permissions` | string  | Permission bitfield as a string (see [Permissions](./permissions.md)) |
+| `permissions` | string  | Permission bitfield as a string (see [Permissions](./permissions))    |
 | `managed`     | boolean | Whether this role is managed by an integration                        |
 | `mentionable` | boolean | Whether this role can be mentioned by anyone                          |
 
@@ -284,7 +462,7 @@ Fires a `GUILD_MEMBER_REMOVE` gateway event. Creates an audit log entry.
 ### List Guild Roles
 
 ```
-GET /guilds/:guildId/roles
+GET /v1/guilds/{guildId}/roles
 ```
 
 Returns all roles ordered by position.
@@ -294,34 +472,52 @@ Returns all roles ordered by position.
 ### Create Role
 
 ```
-POST /guilds/:guildId/roles
+POST /v1/guilds/{guildId}/roles
 ```
 
 Requires `MANAGE_ROLES` permission.
 
 **Request body**:
 
-```json
-{
-	"name": "Moderator",
-	"color": 3447003,
-	"permissions": "104324673",
-	"hoist": true,
-	"mentionable": true
-}
+| Field         | Type    | Required | Description                |
+| ------------- | ------- | -------- | -------------------------- |
+| `name`        | string  | Yes      | Role name                  |
+| `color`       | number  | No       | Color integer              |
+| `permissions` | string  | No       | Permission bitfield string |
+| `position`    | number  | No       | Position in hierarchy      |
+| `mentionable` | boolean | No       | Whether mentionable        |
+| `hoisted`     | boolean | No       | Whether displayed separately |
+
+Fires a `GUILD_ROLE_CREATE` gateway event.
+
+---
+
+### Bulk Update Role Positions
+
+```
+PATCH /v1/guilds/{guildId}/roles
 ```
 
-Fires a `GUILD_ROLE_CREATE` gateway event. Creates an audit log entry.
+Requires `MANAGE_ROLES` permission. Accepts an array of `{ id, position }` objects.
 
 ---
 
 ### Update Role
 
 ```
-PATCH /guilds/:guildId/roles/:roleId
+PATCH /v1/guilds/{guildId}/roles/{roleId}
 ```
 
-Requires `MANAGE_ROLES` permission. All fields optional. You can only edit roles positioned below your highest role.
+Requires `MANAGE_ROLES` permission. All fields optional.
+
+| Field         | Type    | Description                |
+| ------------- | ------- | -------------------------- |
+| `name`        | string  | Role name                  |
+| `color`       | number  | Color integer              |
+| `permissions` | string  | Permission bitfield string |
+| `position`    | number  | Position in hierarchy      |
+| `mentionable` | boolean | Whether mentionable        |
+| `hoisted`     | boolean | Whether displayed separately |
 
 Fires a `GUILD_ROLE_UPDATE` gateway event.
 
@@ -330,7 +526,7 @@ Fires a `GUILD_ROLE_UPDATE` gateway event.
 ### Delete Role
 
 ```
-DELETE /guilds/:guildId/roles/:roleId
+DELETE /v1/guilds/{guildId}/roles/{roleId}
 ```
 
 Requires `MANAGE_ROLES` permission. Cannot delete the `@everyone` role.
@@ -339,98 +535,87 @@ Fires a `GUILD_ROLE_DELETE` gateway event.
 
 ---
 
-### Add Role to Member
-
-```
-PUT /guilds/:guildId/members/:userId/roles/:roleId
-```
-
-Requires `MANAGE_ROLES` permission.
-
-Fires a `GUILD_MEMBER_UPDATE` gateway event. Creates an audit log entry.
-
----
-
-### Remove Role from Member
-
-```
-DELETE /guilds/:guildId/members/:userId/roles/:roleId
-```
-
-Requires `MANAGE_ROLES` permission.
-
----
-
 ## Invites
 
 ### Create Invite
 
 ```
-POST /guilds/:guildId/invites
+POST /v1/guilds/{guildId}/invites
 ```
 
 Requires `CREATE_INVITES` permission.
 
 **Request body** — all fields optional:
 
-```json
-{
-	"maxUses": 10,
-	"expiresInHours": 24,
-	"channelId": "ch_general"
-}
-```
-
 | Field            | Type   | Default         | Description                      |
 | ---------------- | ------ | --------------- | -------------------------------- |
 | `maxUses`        | number | `0` (unlimited) | Max times the invite can be used |
 | `expiresInHours` | number | `0` (never)     | Hours until the invite expires   |
-| `channelId`      | string | —               | Channel the invite links to      |
 
-**Response 200**: Invite object with a `code` field.
+**Response 200**:
+
+```json
+{
+	"code": "abc123",
+	"guild": {},
+	"uses": 0,
+	"max_uses": 10,
+	"max_age": 86400,
+	"temporary": false,
+	"created_at": "2024-01-15T14:30:00.000Z",
+	"expires_at": "2024-01-16T14:30:00.000Z"
+}
+```
 
 ---
 
 ### Get Invite Info
 
 ```
-GET /invites/:code
+GET /v1/invites/{code}
 ```
 
-**No authentication required.** Returns community info for the invite without joining. Returns 404 if expired or exhausted.
+No authentication required. Returns guild info for the invite without joining. Returns 404 if expired or exhausted.
 
 ---
 
 ### Join via Invite
 
 ```
-POST /invites/:code
+POST /v1/invites/{code}
 ```
 
 Consumes an invite code and joins the guild.
 
-| Status | Meaning                            |
-| ------ | ---------------------------------- |
-| 200    | Successfully joined                |
-| 409    | Already a member                   |
-| 410    | Invite expired or max uses reached |
+**Response 200**:
+
+```json
+{
+	"guild_id": "guild_abc",
+	"guild_name": "My Guild",
+	"user_id": "user_abc123",
+	"joined_at": "2024-01-15T14:30:00.000Z"
+}
+```
 
 ---
 
 ### List Guild Invites
 
 ```
-GET /guilds/:guildId/invites
+GET /v1/guilds/{guildId}/invites
 ```
 
-Requires `MANAGE_INVITES` permission. Returns all invites with usage and expiry info.
+Requires `MANAGE_INVITES` permission.
+
+**Query parameters**: `limit`, `after`
 
 ---
 
 ### Delete Invite
 
 ```
-DELETE /guilds/:guildId/invites/:code
+DELETE /v1/guilds/{guildId}/invites/{code}
 ```
 
 The invite creator or anyone with `MANAGE_INVITES` can delete.
@@ -442,21 +627,41 @@ The invite creator or anyone with `MANAGE_INVITES` can delete.
 ### List Guild Emojis
 
 ```
-GET /guilds/:guildId/emojis
+GET /v1/guilds/{guildId}/emojis
+```
+
+**Response 200** — array of:
+
+```json
+{
+	"id": "emoji_abc",
+	"name": "thumbsup",
+	"url": "https://cdn.example.com/emojis/abc.png",
+	"animated": false,
+	"created_at": "2024-01-15T14:30:00.000Z"
+}
 ```
 
 ### Create Emoji
 
 ```
-POST /guilds/:guildId/emojis
+POST /v1/guilds/{guildId}/emojis
 ```
 
 Requires `MANAGE_EMOJIS` permission.
 
+**Request body**:
+
+| Field      | Type    | Required | Description                   |
+| ---------- | ------- | -------- | ----------------------------- |
+| `name`     | string  | Yes      | Emoji name                    |
+| `url`      | string  | Yes      | Image URL for the emoji       |
+| `animated` | boolean | No       | Whether the emoji is animated |
+
 ### Delete Emoji
 
 ```
-DELETE /guilds/:guildId/emojis/:emojiId
+DELETE /v1/guilds/{guildId}/emojis/{emojiId}
 ```
 
 Requires `MANAGE_EMOJIS` permission.
@@ -468,32 +673,50 @@ Requires `MANAGE_EMOJIS` permission.
 ### List Guild Stickers
 
 ```
-GET /guilds/:guildId/stickers
+GET /v1/guilds/{guildId}/stickers
 ```
+
+**Query parameters**: `limit`, `after`
 
 ### Get Sticker
 
 ```
-GET /guilds/:guildId/stickers/:stickerId
+GET /v1/guilds/{guildId}/stickers/{stickerId}
 ```
 
 ### Create Sticker
 
 ```
-POST /guilds/:guildId/stickers
+POST /v1/guilds/{guildId}/stickers
 ```
+
+Requires `MANAGE_EMOJIS` permission.
+
+**Request body**:
+
+| Field         | Type   | Required | Description                           |
+| ------------- | ------ | -------- | ------------------------------------- |
+| `name`        | string | Yes      | Sticker name                          |
+| `url`         | string | Yes      | Image URL                             |
+| `description` | string | No       | Sticker description                   |
+| `format`      | string | No       | One of `png`, `gif`, `apng`, `lottie` |
+| `tags`        | string | No       | Comma-separated tags                  |
 
 ### Update Sticker
 
 ```
-PATCH /guilds/:guildId/stickers/:stickerId
+PATCH /v1/guilds/{guildId}/stickers/{stickerId}
 ```
+
+**Request body** (all optional): `name`, `description`, `tags`
 
 ### Delete Sticker
 
 ```
-DELETE /guilds/:guildId/stickers/:stickerId
+DELETE /v1/guilds/{guildId}/stickers/{stickerId}
 ```
+
+Requires `MANAGE_EMOJIS` permission.
 
 ---
 
@@ -502,55 +725,117 @@ DELETE /guilds/:guildId/stickers/:stickerId
 ### List Scheduled Events
 
 ```
-GET /guilds/:guildId/scheduled-events
+GET /v1/guilds/{guildId}/scheduled-events
 ```
+
+**Query parameters**:
+
+| Parameter       | Type    | Description                   |
+| --------------- | ------- | ----------------------------- |
+| `withUserCount` | boolean | Include interested user count |
+| `limit`         | number  | Max events to return          |
+| `after`         | string  | Return events after this ID   |
 
 ### Get Scheduled Event
 
 ```
-GET /guilds/:guildId/scheduled-events/:eventId
+GET /v1/guilds/{guildId}/scheduled-events/{eventId}
 ```
 
 ### Create Scheduled Event
 
 ```
-POST /guilds/:guildId/scheduled-events
+POST /v1/guilds/{guildId}/scheduled-events
 ```
+
+Requires `MANAGE_COMMUNITY` permission.
 
 **Request body**:
 
-```json
-{
-	"name": "Community Game Night",
-	"description": "Let's play some games!",
-	"scheduledStart": "2024-02-01T20:00:00.000Z",
-	"scheduledEnd": "2024-02-01T23:00:00.000Z",
-	"entityType": "VOICE",
-	"channelId": "ch_voice_1"
-}
-```
+| Field            | Type   | Required | Description                                      |
+| ---------------- | ------ | -------- | ------------------------------------------------ |
+| `name`           | string | Yes      | Event name                                       |
+| `entityType`     | string | Yes      | `STAGE_INSTANCE`, `VOICE`, or `EXTERNAL`         |
+| `scheduledStart` | string | Yes      | ISO 8601 start time                              |
+| `description`    | string | No       | Event description                                |
+| `channelId`      | string | No       | Channel for the event (required for voice/stage) |
+| `scheduledEnd`   | string | No       | ISO 8601 end time                                |
+| `privacyLevel`   | string | No       | Privacy level                                    |
+| `entityMetadata` | object | No       | Extra metadata (e.g., `location` for EXTERNAL)   |
+| `imageUrl`       | string | No       | Event cover image URL                            |
 
-| `entityType`     | API Value | Description                                     |
-| ---------------- | --------- | ----------------------------------------------- |
-| `STAGE_INSTANCE` | `1`       | Stage channel event                             |
-| `VOICE`          | `2`       | Voice channel event                             |
-| `EXTERNAL`       | `3`       | External event (uses `entityMetadata.location`) |
-
-| `status`    | API Value | Description                |
-| ----------- | --------- | -------------------------- |
-| `SCHEDULED` | `1`       | Event is scheduled         |
-| `ACTIVE`    | `2`       | Event is currently running |
-| `COMPLETED` | `3`       | Event has ended            |
-| `CANCELED`  | `4`       | Event was cancelled        |
+**Response 200** includes: `id`, `communityId`, `channelId`, `name`, `description`, `scheduledStart`, `scheduledEnd`, `privacyLevel`, `status`, `entityType`, `entityMetadata`, `imageUrl`, `creatorId`, `createdAt`.
 
 ### Update Scheduled Event
 
 ```
-PATCH /guilds/:guildId/scheduled-events/:eventId
+PATCH /v1/guilds/{guildId}/scheduled-events/{eventId}
 ```
+
+Requires `MANAGE_COMMUNITY` permission. All fields optional. Also accepts `status`:
+
+| `status`    | Description                |
+| ----------- | -------------------------- |
+| `SCHEDULED` | Event is scheduled         |
+| `ACTIVE`    | Event is currently running |
+| `COMPLETED` | Event has ended            |
+| `CANCELLED` | Event was cancelled        |
 
 ### Delete Scheduled Event
 
 ```
-DELETE /guilds/:guildId/scheduled-events/:eventId
+DELETE /v1/guilds/{guildId}/scheduled-events/{eventId}
 ```
+
+Requires `MANAGE_COMMUNITY` permission.
+
+### Express Interest
+
+```
+PUT /v1/guilds/{guildId}/scheduled-events/{eventId}/interest
+```
+
+### Remove Interest
+
+```
+DELETE /v1/guilds/{guildId}/scheduled-events/{eventId}/interest
+```
+
+---
+
+## Message Search
+
+### Search Channel Messages
+
+```
+GET /v1/channels/{channelId}/messages/search
+```
+
+Full-text search within a channel. Requires `READ_MESSAGE_HISTORY` permission.
+
+**Query parameters**:
+
+| Parameter  | Type   | Description                     |
+| ---------- | ------ | ------------------------------- |
+| `q`        | string | Search query                    |
+| `authorId` | string | Filter by author user ID        |
+| `before`   | string | Messages before this message ID |
+| `after`    | string | Messages after this message ID  |
+| `limit`    | number | Max results                     |
+
+### Search Guild Messages
+
+```
+GET /v1/guilds/{guildId}/messages/search
+```
+
+Full-text search across all channels in a guild. Requires `READ_MESSAGE_HISTORY` permission.
+
+**Query parameters**:
+
+| Parameter   | Type   | Description                |
+| ----------- | ------ | -------------------------- |
+| `q`         | string | Search query               |
+| `channelId` | string | Filter to specific channel |
+| `authorId`  | string | Filter by author user ID   |
+| `limit`     | number | Max results                |

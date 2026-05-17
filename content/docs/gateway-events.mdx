@@ -24,7 +24,7 @@ const transport = createConnectTransport({
 const client = createClient(GatewayService, transport);
 
 const stream = client.identify({
-	token: "<clerk_jwt>",
+	token: "<jwt>",
 	intents: 0b111111111111111, // all intents
 	largeThreshold: 50,
 	shard: [0, 1], // [shard_id, shard_count]

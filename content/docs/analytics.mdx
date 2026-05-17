@@ -35,7 +35,7 @@ All analytics endpoints accept a `period` query parameter:
 ## Overview
 
 ```
-GET /guilds/:guildId/analytics/overview
+GET /v1/guilds/{guildId}/analytics/overview
 ```
 
 A high-level health snapshot of the guild. Ideal for dashboard summary cards.
@@ -73,7 +73,7 @@ A high-level health snapshot of the guild. Ideal for dashboard summary cards.
 ## Members
 
 ```
-GET /guilds/:guildId/analytics/members
+GET /v1/guilds/{guildId}/analytics/members
 ```
 
 Member growth trends, retention, and top contributors.
@@ -119,7 +119,7 @@ Member growth trends, retention, and top contributors.
 ## Messages
 
 ```
-GET /guilds/:guildId/analytics/messages
+GET /v1/guilds/{guildId}/analytics/messages
 ```
 
 Message volume, hourly distribution, and top channels/contributors.
@@ -169,7 +169,7 @@ Message volume, hourly distribution, and top channels/contributors.
 ## Channels
 
 ```
-GET /guilds/:guildId/analytics/channels
+GET /v1/guilds/{guildId}/analytics/channels
 ```
 
 Per-channel activity breakdown.
@@ -190,16 +190,6 @@ Per-channel activity breakdown.
 			"reaction_count": 890,
 			"thread_count": 12,
 			"last_activity": "2024-01-15T14:30:00.000Z"
-		},
-		{
-			"channel_id": "ch_help",
-			"channel_name": "help",
-			"type": "text",
-			"message_count": 450,
-			"unique_posters": 28,
-			"reaction_count": 120,
-			"thread_count": 8,
-			"last_activity": "2024-01-15T12:00:00.000Z"
 		}
 	]
 }
@@ -217,7 +207,7 @@ Per-channel activity breakdown.
 ## Engagement
 
 ```
-GET /guilds/:guildId/analytics/engagement
+GET /v1/guilds/{guildId}/analytics/engagement
 ```
 
 Reaction rates, popular emojis, thread participation, and read rates.
@@ -233,8 +223,7 @@ Reaction rates, popular emojis, thread participation, and read rates.
 	"total_reactions": 1230,
 	"top_emojis": [
 		{ "emoji": "thumbsup", "count": 456 },
-		{ "emoji": "heart", "count": 234 },
-		{ "emoji": "laughing", "count": 189 }
+		{ "emoji": "heart", "count": 234 }
 	],
 	"thread_participation": {
 		"total_threads": 20,
@@ -264,11 +253,9 @@ Reaction rates, popular emojis, thread participation, and read rates.
 
 ### Dashboard summary widget
 
-Fetch the overview to populate a summary card:
-
 ```typescript
 const overview = await fetch(
-	`/guilds/${guildId}/analytics/overview?period=7d`,
+	`/v1/guilds/${guildId}/analytics/overview?period=7d`,
 	{
 		headers: { Authorization: `Bearer ${token}` },
 	}
@@ -280,11 +267,9 @@ console.log(`${overview.total_messages} messages sent`);
 
 ### Identifying peak hours
 
-Use the hourly distribution to find when your community is most active:
-
 ```typescript
 const messages = await fetch(
-	`/guilds/${guildId}/analytics/messages?period=30d`,
+	`/v1/guilds/${guildId}/analytics/messages?period=30d`,
 	{
 		headers: { Authorization: `Bearer ${token}` },
 	}
@@ -299,11 +284,9 @@ console.log(`Peak activity at ${peakHour.hour}:00 UTC`);
 
 ### Finding underused channels
 
-Use channel analytics to identify channels that might need attention:
-
 ```typescript
 const channels = await fetch(
-	`/guilds/${guildId}/analytics/channels?period=30d`,
+	`/v1/guilds/${guildId}/analytics/channels?period=30d`,
 	{
 		headers: { Authorization: `Bearer ${token}` },
 	}

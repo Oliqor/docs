@@ -7,20 +7,20 @@ description: Manage channels and messages in your guilds
 
 ## Channel Types
 
-| Type            | Numeric | DB String          | Description                        |
-| --------------- | ------- | ------------------ | ---------------------------------- |
-| Text            | `0`     | `"text"`           | Standard text channel              |
-| DM              | `1`     | `"dm"`             | Direct message (one-on-one)        |
-| Voice           | `2`     | `"voice"`          | Real-time audio/video              |
-| Group DM        | `3`     | —                  | Group direct message               |
-| Category        | `4`     | `"category"`       | Organizational grouping            |
-| Announcement    | `5`     | `"announcement"`   | Announcement channel               |
-| Public Thread   | `11`    | `"thread"`         | Public thread under a text channel |
-| Private Thread  | `12`    | `"private_thread"` | Invite-only thread                 |
-| Stage           | `13`    | `"stage"`          | Stage voice channel                |
-| Guild Directory | `14`    | —                  | Server directory listing           |
-| Forum           | `15`    | `"forum"`          | Discussion-oriented channel        |
-| Media           | `16`    | `"media"`          | Media-focused channel              |
+| Type            | Numeric | Description                        |
+| --------------- | ------- | ---------------------------------- |
+| Text            | `0`     | Standard text channel              |
+| DM              | `1`     | Direct message (one-on-one)        |
+| Voice           | `2`     | Real-time audio/video              |
+| Group DM        | `3`     | Group direct message               |
+| Category        | `4`     | Organizational grouping            |
+| Announcement    | `5`     | Announcement channel               |
+| Public Thread   | `11`    | Public thread under a text channel |
+| Private Thread  | `12`    | Invite-only thread                 |
+| Stage           | `13`    | Stage voice channel                |
+| Guild Directory | `14`    | Server directory listing           |
+| Forum           | `15`    | Discussion-oriented channel        |
+| Media           | `16`    | Media-focused channel              |
 
 ## Channel Object
 
@@ -35,7 +35,7 @@ description: Manage channels and messages in your guilds
 	"parent_id": "ch_category_1",
 	"nsfw": false,
 	"rate_limit_per_user": 0,
-	"last_message_id": "msg_999",
+	"last_message_id": null,
 	"permission_overwrites": [
 		{
 			"id": "role_everyone",
@@ -62,14 +62,7 @@ Thread channels include:
 
 ```json
 {
-	"message_count": 42,
-	"member_count": 5,
-	"thread_metadata": {
-		"archived": false,
-		"auto_archive_duration": 1440,
-		"archive_timestamp": null,
-		"locked": false
-	}
+	"flags": 0
 }
 ```
 
@@ -80,39 +73,25 @@ Thread channels include:
 ### Create Channel
 
 ```
-POST /guilds/:guildId/channels
+POST /v1/guilds/{guildId}/channels
 ```
 
-Requires `CREATE_CHANNELS` permission. Names are automatically lowercased with spaces replaced by hyphens.
+Requires `MANAGE_CHANNELS` permission.
 
 **Request body**:
 
-```json
-{
-	"name": "announcements",
-	"topic": "Official announcements",
-	"type": "text",
-	"parentId": "ch_category_1"
-}
-```
+| Field          | Type   | Required | Description                      |
+| -------------- | ------ | -------- | -------------------------------- |
+| `name`         | string | Yes      | Channel name                     |
+| `topic`        | string | No       | Channel topic                    |
+| `type`         | number | No       | Channel type (default: `0`)      |
+| `parentId`     | string | No       | Category channel ID              |
+| `bitrate`      | number | No       | Audio bitrate (voice channels)   |
+| `userLimit`    | number | No       | Max users (voice, 0 = unlimited) |
+| `rtcRegion`    | string | No       | Voice region override            |
+| `videoQuality` | string | No       | `"auto"` or `"full"`             |
 
-| Field      | Type    | Constraints   | Description                      |
-| ---------- | ------- | ------------- | -------------------------------- |
-| `name`     | string  | 1–50 chars    | Channel name                     |
-| `topic`    | string  | Max 256 chars | Channel topic                    |
-| `type`     | string  | See types     | Channel type (default: `"text"`) |
-| `parentId` | string  | —             | Category channel ID              |
-| `nsfw`     | boolean | —             | Age-restricted content           |
-| `slowmode` | number  | Seconds       | Slowmode rate limit              |
-
-For voice channels, additional fields:
-
-| Field          | Type   | Default | Description               |
-| -------------- | ------ | ------- | ------------------------- |
-| `bitrate`      | number | 64000   | Audio bitrate in bits/s   |
-| `userLimit`    | number | 0       | Max users (0 = unlimited) |
-| `rtcRegion`    | string | null    | Voice region override     |
-| `videoQuality` | string | "auto"  | `"auto"` or `"full"`      |
+**Response 200**: Channel object.
 
 Fires a `CHANNEL_CREATE` gateway event. Creates an audit log entry.
 
@@ -121,7 +100,7 @@ Fires a `CHANNEL_CREATE` gateway event. Creates an audit log entry.
 ### List Channels
 
 ```
-GET /guilds/:guildId/channels
+GET /v1/guilds/{guildId}/channels
 ```
 
 Returns all channels ordered by position.
@@ -131,10 +110,18 @@ Returns all channels ordered by position.
 ### Update Channel
 
 ```
-PATCH /channels/:channelId
+PATCH /v1/channels/{channelId}
 ```
 
 Requires `MANAGE_CHANNELS` permission. All fields optional.
+
+**Request body**:
+
+| Field      | Type   | Description    |
+| ---------- | ------ | -------------- |
+| `name`     | string | Channel name   |
+| `topic`    | string | Channel topic  |
+| `position` | number | Channel position |
 
 Fires a `CHANNEL_UPDATE` gateway event.
 
@@ -143,10 +130,10 @@ Fires a `CHANNEL_UPDATE` gateway event.
 ### Delete Channel
 
 ```
-DELETE /channels/:channelId
+DELETE /v1/channels/{channelId}
 ```
 
-Requires `MANAGE_CHANNELS` permission. Deletes the channel and all messages, threads, and pins within it.
+Requires `MANAGE_CHANNELS` permission.
 
 Fires a `CHANNEL_DELETE` gateway event.
 
@@ -155,58 +142,42 @@ Fires a `CHANNEL_DELETE` gateway event.
 ### Trigger Typing Indicator
 
 ```
-POST /channels/:channelId/typing
+POST /v1/channels/{channelId}/typing
 ```
 
-Broadcasts a `TYPING_START` gateway event to all clients watching the channel. Call this while the user is composing a message; clients typically display it for 5–10 seconds.
-
-**Response 204**: No content.
+Broadcasts a `TYPING_START` gateway event to all clients watching the channel.
 
 ---
 
 ## Threads
 
-Threads are lightweight sub-channels that live under a text channel. They allow focused conversations without cluttering the main channel.
+Threads are lightweight sub-channels that live under a text channel.
 
 ### Create Thread
 
 ```
-POST /channels/:channelId/threads
+POST /v1/channels/{channelId}/threads
 ```
-
-Any member with `USE_THREADS` permission can create a public thread. Private threads require `CREATE_PRIVATE_THREADS`.
 
 **Request body**:
 
-```json
-{
-	"name": "discussion-topic",
-	"messageId": "msg_123",
-	"type": 11,
-	"autoArchiveDuration": 1440
-}
-```
+| Field       | Type   | Required | Description                                |
+| ----------- | ------ | -------- | ------------------------------------------ |
+| `name`      | string | Yes      | Thread name                                |
+| `messageId` | string | No       | Parent message to start the thread from    |
+| `type`      | number | No       | `11` = public thread, `12` = private thread |
 
-| Field                 | Type   | Default | Description                                                       |
-| --------------------- | ------ | ------- | ----------------------------------------------------------------- |
-| `name`                | string | —       | Thread name (required)                                            |
-| `messageId`           | string | —       | Parent message to start the thread from                           |
-| `type`                | number | `11`    | `11` = public thread, `12` = private thread                       |
-| `autoArchiveDuration` | number | `1440`  | Minutes of inactivity before auto-archive (60, 1440, 4320, 10080) |
+**Response 200**: Channel object.
 
-When `messageId` is provided, a thread starter message (type 21) is created linking the thread to the original message.
-
-The creator is automatically added as a thread member. Fires `THREAD_CREATE` and `THREAD_MEMBER_UPDATE` gateway events.
+Fires `THREAD_CREATE` and `THREAD_MEMBER_UPDATE` gateway events.
 
 ---
 
 ### List Threads
 
 ```
-GET /channels/:channelId/threads
+GET /v1/channels/{channelId}/threads
 ```
-
-Returns threads under a channel. Supports filtering for archived threads.
 
 **Query parameters**:
 
@@ -220,8 +191,8 @@ Returns threads under a channel. Supports filtering for archived threads.
 
 ```json
 {
-  "threads": [...],
-  "has_more": false
+	"threads": [...],
+	"has_more": false
 }
 ```
 
@@ -230,7 +201,7 @@ Returns threads under a channel. Supports filtering for archived threads.
 ### List Active Threads
 
 ```
-GET /guilds/:guildId/threads/active
+GET /v1/guilds/{guildId}/threads/active
 ```
 
 Returns all non-archived threads across all channels in the guild.
@@ -240,24 +211,15 @@ Returns all non-archived threads across all channels in the guild.
 ### Update Thread
 
 ```
-PATCH /threads/:threadId
+PATCH /v1/threads/{threadId}
 ```
-
-| Field                   | Permission Required                 | Description                         |
-| ----------------------- | ----------------------------------- | ----------------------------------- |
-| `name`                  | Thread creator or `MANAGE_CHANNELS` | Rename the thread                   |
-| `archived`              | Thread creator or `MANAGE_CHANNELS` | Archive/unarchive                   |
-| `locked`                | `MANAGE_CHANNELS` only              | Lock thread (prevents new messages) |
-| `auto_archive_duration` | Thread creator or `MANAGE_CHANNELS` | Change auto-archive timer           |
-
-Locked threads can only be unarchived by users with `MANAGE_CHANNELS`.
 
 ---
 
 ### Delete Thread
 
 ```
-DELETE /threads/:threadId
+DELETE /v1/threads/{threadId}
 ```
 
 Requires `MANAGE_CHANNELS` permission.
@@ -266,17 +228,13 @@ Requires `MANAGE_CHANNELS` permission.
 
 ### Thread Members
 
-| Endpoint                                      | Method | Description                 |
-| --------------------------------------------- | ------ | --------------------------- |
-| `/channels/:channelId/thread-members/@me`     | PUT    | Join a thread               |
-| `/channels/:channelId/thread-members/@me`     | DELETE | Leave a thread              |
-| `/channels/:channelId/thread-members/:userId` | PUT    | Add a user to a thread      |
-| `/channels/:channelId/thread-members/:userId` | DELETE | Remove a user from a thread |
-| `/channels/:channelId/thread-members`         | GET    | List all thread members     |
-
-Sending a message in a thread automatically adds you as a thread member.
-
-Private threads require explicit membership — non-members cannot read messages.
+| Endpoint                                               | Method | Description                 |
+| ------------------------------------------------------ | ------ | --------------------------- |
+| `/v1/channels/{channelId}/thread-members/@me`          | PUT    | Join a thread               |
+| `/v1/channels/{channelId}/thread-members/@me`          | DELETE | Leave a thread              |
+| `/v1/channels/{channelId}/thread-members/{userId}`     | PUT    | Add a user to a thread      |
+| `/v1/channels/{channelId}/thread-members/{userId}`     | DELETE | Remove a user from a thread |
+| `/v1/channels/{channelId}/thread-members`              | GET    | List all thread members     |
 
 ---
 
@@ -286,99 +244,39 @@ Private threads require explicit membership — non-members cannot read messages
 
 ```json
 {
-  "id": "msg_123",
-  "channel_id": "ch_general",
-  "type": 0,
-  "content": "Hello, world!",
-  "author": {
-    "id": "user_abc123",
-    "username": "alice",
-    "global_name": "Alice",
-    "avatar": "https://cdn.example.com/avatars/abc.png",
-    "bot": false
-  },
-  "timestamp": "2024-01-15T14:30:00.000Z",
-  "edited_timestamp": null,
-  "tts": false,
-  "mention_everyone": false,
-  "mentions": [],
-  "mention_roles": [],
-  "pinned": false,
-  "nonce": "client-dedup-123",
-  "flags": 0,
-  "reactions": [
-    {
-      "count": 3,
-      "me": true,
-      "emoji": { "id": null, "name": "👍", "animated": false }
-    }
-  ],
-  "message_reference": {
-    "message_id": "msg_100",
-    "channel_id": "ch_general"
-  },
-  "referenced_message": { ... }
+	"id": "msg_123",
+	"channel_id": "ch_general",
+	"content": "Hello, world!",
+	"author": {
+		"id": "user_abc123",
+		"username": "alice",
+		"global_name": "Alice",
+		"avatar": "https://cdn.example.com/avatars/abc.png"
+	},
+	"created_at": "2024-01-15T14:30:00.000Z",
+	"edited_timestamp": null,
+	"nonce": "client-dedup-123",
+	"flags": 0,
+	"reactions": [],
+	"reference": null
 }
 ```
-
-**Message types**:
-
-| Type | Name                   | Description                               |
-| ---- | ---------------------- | ----------------------------------------- |
-| `0`  | Default                | Regular message                           |
-| `1`  | Recipient Add          | User added to group DM                    |
-| `2`  | Recipient Remove       | User removed from group DM                |
-| `3`  | Call                   | Call started in DM                        |
-| `4`  | Channel Name Change    | Thread or channel renamed                 |
-| `5`  | Channel Icon Change    | Channel icon changed                      |
-| `6`  | Channel Pinned Message | A message was pinned                      |
-| `7`  | User Join              | User joined the guild                     |
-| `8`  | Guild Boost            | User boosted the guild                    |
-| `9`  | Guild Boost Tier 1     | Guild reached boost tier 1                |
-| `10` | Guild Boost Tier 2     | Guild reached boost tier 2                |
-| `11` | Guild Boost Tier 3     | Guild reached boost tier 3                |
-| `12` | Channel Follow Add     | Announcement channel followed             |
-| `19` | Reply                  | Reply to another message                  |
-| `20` | Chat Input Command     | Slash command invoked                     |
-| `21` | Thread Starter Message | System message linking to a thread        |
-| `22` | Guild Invite Reminder  | Reminder to invite members                |
-| `23` | Context Menu Command   | User/message context menu command invoked |
-| `24` | Auto Moderation Action | Auto-mod triggered and took action        |
-| `27` | Stage Start            | Stage channel started                     |
-| `28` | Stage End              | Stage channel ended                       |
-| `29` | Stage Speaker          | User became a speaker in a stage          |
-| `31` | Stage Topic            | Stage topic changed                       |
 
 ---
 
 ### Send Message
 
 ```
-POST /channels/:channelId/messages
+POST /v1/channels/{channelId}/messages
 ```
 
 **Request body**:
 
-```json
-{
-	"content": "Hello, world!",
-	"referenceMessageId": "msg_100",
-	"nonce": "client-dedup-id-1"
-}
-```
-
-| Field                | Type   | Constraints  | Description                             |
-| -------------------- | ------ | ------------ | --------------------------------------- |
-| `content`            | string | 1–4000 chars | Message content (required)              |
-| `referenceMessageId` | string | —            | Reply to this message (sets type to 19) |
-| `nonce`              | string | —            | Client-side deduplication token         |
-
-**Behavior in threads**:
-
-- Sending to an archived thread fails with 403.
-- Sending to a private thread requires membership.
-- Sending automatically adds you as a thread member.
-- Thread `messageCount` is incremented.
+| Field                  | Type   | Required | Description                             |
+| ---------------------- | ------ | -------- | --------------------------------------- |
+| `content`              | string | Yes      | Message content                         |
+| `reference_message_id` | string | No       | Reply to this message                   |
+| `nonce`                | string | No       | Client-side deduplication token         |
 
 Fires a `MESSAGE_CREATE` gateway event.
 
@@ -387,10 +285,10 @@ Fires a `MESSAGE_CREATE` gateway event.
 ### Get Messages
 
 ```
-GET /channels/:channelId/messages
+GET /v1/channels/{channelId}/messages
 ```
 
-Cursor-based pagination. Use exactly one of `before`, `after`, or `around`.
+Cursor-based pagination. Use `before`, `after`, or `around`.
 
 | Parameter | Type   | Default | Description                |
 | --------- | ------ | ------- | -------------------------- |
@@ -404,7 +302,7 @@ Cursor-based pagination. Use exactly one of `before`, `after`, or `around`.
 ### Get Single Message
 
 ```
-GET /channels/:channelId/messages/:messageId
+GET /v1/channels/{channelId}/messages/{messageId}
 ```
 
 ---
@@ -412,18 +310,16 @@ GET /channels/:channelId/messages/:messageId
 ### Edit Message
 
 ```
-PATCH /channels/:channelId/messages/:messageId
+PATCH /v1/channels/{channelId}/messages/{messageId}
 ```
 
-Only the original author can edit their message. Sets `edited_timestamp`.
+Only the original author can edit their message.
 
 **Request body**:
 
-```json
-{
-	"content": "Updated content"
-}
-```
+| Field     | Type   | Required | Description     |
+| --------- | ------ | -------- | --------------- |
+| `content` | string | Yes      | Updated content |
 
 Fires a `MESSAGE_UPDATE` gateway event.
 
@@ -432,30 +328,28 @@ Fires a `MESSAGE_UPDATE` gateway event.
 ### Delete Message
 
 ```
-DELETE /channels/:channelId/messages/:messageId
+DELETE /v1/channels/{channelId}/messages/{messageId}
 ```
 
-The original author can always delete their own messages. Others need `MANAGE_MESSAGES` permission.
+The original author can always delete their own messages. Others need `MANAGE_MESSAGES`.
 
-Fires a `MESSAGE_DELETE` gateway event. Creates an audit log entry when a moderator deletes another user's message.
+Fires a `MESSAGE_DELETE` gateway event.
 
 ---
 
 ### Bulk Delete Messages
 
 ```
-POST /channels/:channelId/messages/bulk-delete
+POST /v1/channels/{channelId}/messages/bulk-delete
 ```
 
 Requires `MANAGE_MESSAGES` permission. Deletes 1–100 messages at once.
 
 **Request body**:
 
-```json
-{
-	"messageIds": ["msg_1", "msg_2", "msg_3"]
-}
-```
+| Field        | Type     | Required | Description              |
+| ------------ | -------- | -------- | ------------------------ |
+| `message_ids`| string[] | Yes      | Array of message IDs     |
 
 **Response 200**:
 
@@ -468,37 +362,94 @@ Requires `MANAGE_MESSAGES` permission. Deletes 1–100 messages at once.
 
 ---
 
+### Crosspost Message
+
+```
+POST /v1/channels/{channelId}/messages/{messageId}/crosspost
+```
+
+Publishes a message from an announcement channel. Requires `SEND_MESSAGES` or `MANAGE_MESSAGES`.
+
+---
+
+### Search Channel Messages
+
+```
+GET /v1/channels/{channelId}/messages/search
+```
+
+Full-text search within a channel. Requires `READ_MESSAGE_HISTORY` permission.
+
+| Parameter  | Type   | Description                      |
+| ---------- | ------ | -------------------------------- |
+| `q`        | string | Search query                     |
+| `authorId` | string | Filter by author user ID         |
+| `before`   | string | Messages before this message ID  |
+| `after`    | string | Messages after this message ID   |
+| `limit`    | number | Max results                      |
+
+---
+
 ## Reactions
 
 ### Add Reaction
 
 ```
-PUT /channels/:channelId/messages/:messageId/reactions/:emoji
+PUT /v1/channels/{channelId}/messages/{messageId}/reactions/{emoji}
 ```
 
-`emoji` is URL-encoded (e.g., `%F0%9F%91%8D` for 👍). Idempotent — adding the same reaction twice is a no-op.
+`emoji` is URL-encoded (e.g., `%F0%9F%91%8D` for 👍). Idempotent.
 
-Requires `ADD_REACTIONS` permission. Fires a `MESSAGE_REACTION_ADD` gateway event.
+**Response 200**:
+
+```json
+{
+	"message_id": "msg_123",
+	"emoji": "👍",
+	"count": 3
+}
+```
 
 ---
 
 ### Remove Reaction
 
 ```
-DELETE /channels/:channelId/messages/:messageId/reactions/:emoji
+DELETE /v1/channels/{channelId}/messages/{messageId}/reactions/{emoji}
 ```
 
-Removes your own reaction. Fires a `MESSAGE_REACTION_REMOVE` gateway event.
+Removes your own reaction.
+
+---
+
+### Remove All Reactions for Emoji
+
+```
+DELETE /v1/channels/{channelId}/messages/{messageId}/reactions/{emoji}/all
+```
+
+Requires `MANAGE_MESSAGES`.
 
 ---
 
 ### List Reactions
 
 ```
-GET /channels/:channelId/messages/:messageId/reactions
+GET /v1/channels/{channelId}/messages/{messageId}/reactions
 ```
 
 Returns all reactions grouped by emoji with reacting user info.
+
+**Response 200** — array of:
+
+```json
+{
+	"emoji": "👍",
+	"emoji_id": null,
+	"count": 3,
+	"users": []
+}
+```
 
 ---
 
@@ -507,32 +458,38 @@ Returns all reactions grouped by emoji with reacting user info.
 ### List Pins
 
 ```
-GET /channels/:channelId/pins
+GET /v1/channels/{channelId}/pins
 ```
 
-Returns all pinned messages in the channel, ordered by pin time descending.
+Returns all pinned messages in the channel.
 
 ---
 
 ### Pin Message
 
 ```
-PUT /channels/:channelId/pins/:messageId
+PUT /v1/channels/{channelId}/pins/{messageId}
 ```
 
-Requires `MANAGE_MESSAGES` permission. Idempotent.
+Requires `MANAGE_MESSAGES` permission.
 
-Fires a `CHANNEL_PINS_UPDATE` gateway event. Creates an audit log entry.
+**Response 200**:
+
+```json
+{
+	"message_id": "msg_123",
+	"channel_id": "ch_general",
+	"pinned": true
+}
+```
 
 ---
 
 ### Unpin Message
 
 ```
-DELETE /channels/:channelId/pins/:messageId
+DELETE /v1/channels/{channelId}/pins/{messageId}
 ```
-
-Fires a `CHANNEL_PINS_UPDATE` gateway event.
 
 ---
 
@@ -545,73 +502,157 @@ Webhooks allow external services to send messages to a channel without a bot acc
 ```json
 {
 	"id": "wh_abc",
-	"type": 1,
-	"guild_id": "guild_abc",
-	"channel_id": "ch_general",
+	"channelId": "ch_general",
+	"communityId": "guild_abc",
 	"name": "GitHub Notifications",
-	"avatar": null,
+	"avatarUrl": null,
 	"token": "webhook-secret-token",
-	"application_id": null
+	"createdAt": "2024-01-15T14:30:00.000Z"
 }
 ```
-
-| `type` | Description                            |
-| ------ | -------------------------------------- |
-| `1`    | Incoming — sends messages to a channel |
-| `2`    | Channel Follower                       |
-| `3`    | Application — managed by a bot         |
 
 ---
 
 ### List Channel Webhooks
 
 ```
-GET /channels/:channelId/webhooks
+GET /v1/channels/{channelId}/webhooks
 ```
+
+Requires `MANAGE_CHANNELS` permission.
+
+---
 
 ### Create Webhook
 
 ```
-POST /channels/:channelId/webhooks
+POST /v1/channels/{channelId}/webhooks
 ```
 
 Requires `MANAGE_CHANNELS` permission. The response includes the `token` — store it securely.
 
-```json
-{
-	"name": "My Webhook",
-	"avatarUrl": "https://example.com/avatar.png"
-}
+**Request body**:
+
+| Field       | Type   | Required | Description       |
+| ----------- | ------ | -------- | ----------------- |
+| `name`      | string | Yes      | Webhook name      |
+| `avatarUrl` | string | No       | Webhook avatar URL |
+
+---
+
+### Get Webhook
+
+```
+GET /v1/webhooks/{webhookId}
 ```
 
-### Get / Update / Delete Webhook
+### Update Webhook
 
 ```
-GET    /webhooks/:webhookId
-PATCH  /webhooks/:webhookId
-DELETE /webhooks/:webhookId
+PATCH /v1/webhooks/{webhookId}
 ```
+
+**Request body** (all optional): `name`, `avatarUrl`, `channelId`
+
+### Delete Webhook
+
+```
+DELETE /v1/webhooks/{webhookId}
+```
+
+Requires `MANAGE_CHANNELS` permission.
+
+---
+
+### Get Webhook by Token
+
+```
+GET /v1/webhooks/{webhookId}/{webhookToken}
+```
+
+No authentication required.
+
+---
 
 ### Execute Webhook
 
 ```
-POST /webhooks/:webhookId/:webhookToken
+POST /v1/webhooks/{webhookId}/{webhookToken}
 ```
 
-**No authentication required** — the token in the URL serves as the credential. Sends a message in the webhook's channel.
+No authentication required — the token in the URL serves as the credential.
+
+**Request body**:
+
+| Field        | Type   | Description       |
+| ------------ | ------ | ----------------- |
+| `content`    | string | Message content   |
+| `embeds`     | array  | Embed objects     |
+| `components` | array  | Component objects |
+| `flags`      | number | Message flags     |
+
+### Edit Original Interaction Response
+
+```
+PATCH /v1/webhooks/{webhookId}/{webhookToken}/messages/@original
+```
+
+### Delete Original Interaction Response
+
+```
+DELETE /v1/webhooks/{webhookId}/{webhookToken}/messages/@original
+```
+
+---
+
+## Permission Overrides
+
+### Get Channel Permission Overrides
+
+```
+GET /v1/guilds/{guildId}/channels/{channelId}/permissions
+```
+
+**Response 200** — array of:
 
 ```json
 {
-	"content": "New commit pushed to main",
-	"username": "GitHub",
-	"avatarUrl": "https://github.githubassets.com/favicon.ico"
+	"id": "role_mod",
+	"type": 0,
+	"allow": "104324673",
+	"deny": "0"
 }
 ```
 
-At least one of `content` or `embeds` must be provided.
+| `type` | Target  |
+| ------ | ------- |
+| `0`    | Role    |
+| `1`    | Member  |
 
-### Delete Webhook Message
+---
+
+### Set Channel Permission Override
 
 ```
-DELETE /webhooks/:webhookId/:webhookToken/messages/:messageId
+PUT /v1/guilds/{guildId}/channels/{channelId}/permissions/{overrideId}
 ```
+
+Requires `MANAGE_CHANNELS`.
+
+**Request body**:
+
+| Field   | Type   | Required | Description                  |
+| ------- | ------ | -------- | ---------------------------- |
+| `type`  | number | Yes      | `0` for role, `1` for member |
+| `allow` | string | No       | Allowed permission bit set   |
+| `deny`  | string | No       | Denied permission bit set    |
+
+---
+
+### Delete Channel Permission Override
+
+```
+DELETE /v1/guilds/{guildId}/channels/{channelId}/permissions/{overrideId}
+```
+
+Requires `MANAGE_CHANNELS`.

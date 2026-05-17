@@ -26,8 +26,8 @@ description: User objects and user-related endpoints
 
 | Field          | Type           | Description                         |
 | -------------- | -------------- | ----------------------------------- |
-| `id`           | string         | The user's unique ID (Clerk ID)     |
-| `username`     | string         | Unique username (2–32 chars)        |
+| `id`           | string         | The user's unique ID                |
+| `username`     | string         | Unique username                     |
 | `global_name`  | string \| null | Display name shown in the UI        |
 | `avatar`       | string \| null | Avatar image URL                    |
 | `banner`       | string \| null | Profile banner image URL            |
@@ -39,13 +39,6 @@ description: User objects and user-related endpoints
 | `flags`        | number         | User flags bitfield                 |
 | `public_flags` | number         | Public user flags bitfield          |
 
-When fetching your own profile, additional fields may be included:
-
-| Field   | Type           | Description                        |
-| ------- | -------------- | ---------------------------------- |
-| `email` | string \| null | Email address (own profile only)   |
-| `staff` | boolean        | Whether the user is platform staff |
-
 ---
 
 ## Endpoints
@@ -53,28 +46,28 @@ When fetching your own profile, additional fields may be included:
 ### Get Current User
 
 ```
-GET /users/@me
+GET /v1/users/@me
 ```
 
-Returns the authenticated user's profile. If the user doesn't exist in the database yet, they are automatically provisioned from Clerk.
+Returns the authenticated user's profile.
 
-**Response 200**: [User object](#user-object) (includes `email` and `staff`).
+**Response 200**: [User object](#user-object).
 
 ---
 
 ### Update Current User
 
 ```
-PATCH /users/@me
+PATCH /v1/users/@me
 ```
 
-Updates the current user's profile. The `username` field syncs to Clerk; all other fields are stored locally in the database.
+Updates the current user's profile.
 
 **Request body** — all fields optional:
 
 | Field          | Type           | Constraints   | Description    |
 | -------------- | -------------- | ------------- | -------------- |
-| `username`     | string         | 2–32 chars    | Syncs to Clerk |
+| `username`     | string         | —             | Username       |
 | `display_name` | string \| null | Max 32 chars  | Display name   |
 | `avatar`       | string \| null | URL           | Avatar URL     |
 | `banner`       | string \| null | URL           | Banner URL     |
@@ -84,19 +77,6 @@ Updates the current user's profile. The `username` field syncs to Clerk; all oth
 
 Set any field to `null` to clear it.
 
-**Example**:
-
-```json
-{
-	"display_name": "Alice in Wonderland",
-	"bio": "Curiouser and curiouser!",
-	"pronouns": "she/her",
-	"accent_color": 16711680
-}
-```
-
-Fires a `USER_UPDATE` gateway event to the user's own stream.
-
 **Response 200**: Updated [user object](#user-object).
 
 ---
@@ -104,12 +84,12 @@ Fires a `USER_UPDATE` gateway event to the user's own stream.
 ### Get User Profile
 
 ```
-GET /users/:userId
+GET /v1/users/{userId}
 ```
 
-Returns the public profile of any user. Does not include `email` or `staff` status. Includes `created_at`.
+Returns the public profile of any user.
 
-**Response 200**: [User object](#user-object) plus `created_at` (ISO 8601).
+**Response 200**: [User object](#user-object).
 
 ---
 
@@ -118,10 +98,10 @@ Returns the public profile of any user. Does not include `email` or `staff` stat
 ### Get User Presence
 
 ```
-GET /users/:userId/presence
+GET /v1/users/{userId}/presence
 ```
 
-Returns the current presence status and activity for any user.
+Returns the current presence status and activity for any user. Activities may be hidden based on privacy settings.
 
 **Response 200**:
 
@@ -130,8 +110,8 @@ Returns the current presence status and activity for any user.
 	"user_id": "user_abc123",
 	"status": "online",
 	"custom_status": "Writing code",
-	"activities": [],
-	"last_seen": "2024-01-15T14:30:00.000Z"
+	"last_seen": "2024-01-15T14:30:00.000Z",
+	"activities": {}
 }
 ```
 
@@ -147,24 +127,34 @@ Returns the current presence status and activity for any user.
 ### Update Own Presence
 
 ```
-PUT /users/@me/presence
+PUT /v1/users/@me/presence
 ```
 
 Updates your presence status. A `PRESENCE_UPDATE` gateway event is broadcast to every guild the user belongs to.
 
 **Request body**:
 
-```json
-{
-	"status": "dnd",
-	"customStatus": "In a meeting"
-}
+| Field          | Type   | Required | Description                               |
+| -------------- | ------ | -------- | ----------------------------------------- |
+| `status`       | string | Yes      | One of `online`, `idle`, `dnd`, `offline` |
+| `customStatus` | string | No       | Free-text status message                  |
+| `activities`   | array  | No       | List of activity objects                  |
+
+---
+
+### Set Activities
+
+```
+PUT /v1/users/@me/presence/activity
 ```
 
-| Field          | Type   | Constraints   | Description                               |
-| -------------- | ------ | ------------- | ----------------------------------------- |
-| `status`       | string | Required      | One of `online`, `idle`, `dnd`, `offline` |
-| `customStatus` | string | Max 128 chars | Free-text status message                  |
+Sets the user's current activities (e.g., playing a game, listening to music). External apps should use OAuth with the `activities.write` scope.
+
+**Request body**:
+
+| Field        | Type  | Required | Description              |
+| ------------ | ----- | -------- | ------------------------ |
+| `activities` | array | Yes      | List of activity objects |
 
 ---
 
@@ -173,7 +163,7 @@ Updates your presence status. A `PRESENCE_UPDATE` gateway event is broadcast to 
 ### Get User Settings
 
 ```
-GET /users/@me/settings
+GET /v1/users/@me/settings
 ```
 
 **Response 200**:
@@ -189,7 +179,7 @@ GET /users/@me/settings
 ### Update User Settings
 
 ```
-PATCH /users/@me/settings
+PATCH /v1/users/@me/settings
 ```
 
 **Request body**:
@@ -211,7 +201,7 @@ PATCH /users/@me/settings
 ### Get Read States
 
 ```
-GET /users/@me/read-state
+GET /v1/users/@me/read-state
 ```
 
 Returns the last-read position and unread mention count for every channel the user has interacted with.
@@ -234,12 +224,10 @@ Returns the last-read position and unread mention count for every channel the us
 ### Acknowledge Messages
 
 ```
-POST /channels/:channelId/ack/:messageId
+POST /v1/channels/{channelId}/ack/{messageId}
 ```
 
 Marks all messages up to `messageId` as read in the channel. Resets the mention count to zero.
-
-Fires a `MESSAGE_ACK` gateway event to the user's own stream.
 
 **Response 200**:
 
@@ -254,13 +242,13 @@ Fires a `MESSAGE_ACK` gateway event to the user's own stream.
 
 ## Sessions
 
-### Get Active Sessions
+### List Sessions
 
 ```
-GET /users/@me/sessions
+GET /v1/users/@me/sessions
 ```
 
-Returns all active Clerk sessions for the current user, including which one is the current session.
+Returns all active sessions for the current user.
 
 **Response 200**:
 
@@ -268,15 +256,42 @@ Returns all active Clerk sessions for the current user, including which one is t
 [
 	{
 		"id": "sess_abc",
-		"status": "active",
-		"last_active_at": 1705334400,
-		"expire_at": 1705938400,
-		"abandon_at": 1706543200,
-		"created_at": 1705334400,
-		"updated_at": 1705334400,
+		"user_agent": "Mozilla/5.0...",
+		"ip_address": "192.168.1.1",
+		"last_active_at": "2024-01-15T10:00:00.000Z",
+		"created_at": "2024-01-01T00:00:00.000Z",
+		"expires_at": "2024-02-01T00:00:00.000Z",
 		"is_current": true
 	}
 ]
+```
+
+| Field            | Type           | Description                                |
+| ---------------- | -------------- | ------------------------------------------ |
+| `id`             | string         | Session ID                                 |
+| `user_agent`     | string \| null | Browser/client user agent string           |
+| `ip_address`     | string \| null | IP address of the session                  |
+| `last_active_at` | string         | ISO 8601 timestamp of last activity        |
+| `created_at`     | string         | ISO 8601 timestamp when session was created |
+| `expires_at`     | string         | ISO 8601 timestamp when session expires    |
+| `is_current`     | boolean        | Whether this is the current active session |
+
+---
+
+### Revoke Session
+
+```
+DELETE /v1/users/@me/sessions/{sessionId}
+```
+
+Revokes a specific session by ID, signing out that device/client.
+
+**Response 200**:
+
+```json
+{
+	"id": "sess_abc"
+}
 ```
 
 ---
@@ -286,30 +301,10 @@ Returns all active Clerk sessions for the current user, including which one is t
 ### Get Current User Guilds
 
 ```
-GET /users/@me/guilds
+GET /v1/users/@me/guilds
 ```
 
-Returns all guilds the user is a member of, with their membership details.
-
-**Response 200**:
-
-```json
-[
-	{
-		"id": "guild_abc",
-		"name": "My Guild",
-		"icon": null,
-		"banner": null,
-		"description": "A great community",
-		"owner_id": "user_abc123",
-		"features": [],
-		"member_count": 42,
-		"joined_at": "2024-01-01T00:00:00.000Z",
-		"nick": "alice-nickname",
-		"roles": ["role_mod", "role_vip"]
-	}
-]
-```
+Returns all guilds the user is a member of.
 
 ---
 
@@ -318,25 +313,23 @@ Returns all guilds the user is a member of, with their membership details.
 ### Open DM Channel
 
 ```
-POST /users/@me/channels
+POST /v1/users/@me/channels
 ```
 
 Opens a DM channel with another user. If a DM channel already exists, returns the existing one.
 
 **Request body**:
 
-```json
-{
-	"recipientId": "user_def456"
-}
-```
+| Field          | Type   | Required | Description             |
+| -------------- | ------ | -------- | ----------------------- |
+| `recipient_id` | string | Yes      | The recipient's user ID |
 
 **Response 200**:
 
 ```json
 {
 	"id": "dm_abc",
-	"type": 1,
+	"type": "dm",
 	"recipients": [
 		{
 			"id": "user_def456",
@@ -345,59 +338,81 @@ Opens a DM channel with another user. If a DM channel already exists, returns th
 			"avatar": null
 		}
 	],
-	"last_message_id": null
+	"created_at": "2024-01-15T14:30:00.000Z"
 }
 ```
-
-| `type` | Meaning         |
-| ------ | --------------- |
-| `1`    | DM (one-on-one) |
-| `3`    | Group DM        |
 
 ---
 
 ### List DM Channels
 
 ```
-GET /users/@me/channels
+GET /v1/users/@me/channels
 ```
 
-Returns all open DM channels, ordered by last activity.
+Returns all open DM channels, ordered by most recently active, with last message preview.
 
----
-
-### Send DM Message
-
-```
-POST /channels/:channelId/dm-messages
-```
-
-Sends a message in a DM channel. Only participants of the DM can send messages.
-
-**Request body**:
+**Response 200** — array of:
 
 ```json
 {
-	"content": "Hey, how's it going?"
+	"id": "dm_abc",
+	"type": "dm",
+	"recipients": [...],
+	"last_message": {},
+	"created_at": "2024-01-15T14:30:00.000Z"
 }
 ```
-
-Fires a `DM_MESSAGE_CREATE` gateway event to all participants.
 
 ---
 
 ### Get DM Messages
 
 ```
-GET /channels/:channelId/dm-messages
+GET /v1/channels/{channelId}/dm-messages
 ```
 
-Retrieves message history from a DM channel.
+Fetches messages in a DM channel. Defaults to 50 messages, max 100. Supports cursor-based pagination.
 
-**Query parameters**:
+| Parameter | Description                          |
+| --------- | ------------------------------------ |
+| `limit`   | Max messages to return (default 50)  |
+| `before`  | ISO timestamp cursor (messages before) |
+| `after`   | ISO timestamp cursor (messages after)  |
 
-| Parameter | Type   | Default | Description             |
-| --------- | ------ | ------- | ----------------------- |
-| `limit`   | number | 50      | Max messages (1–100)    |
-| `before`  | string | —       | Messages before this ID |
-| `after`   | string | —       | Messages after this ID  |
+**Response 200** — array of:
+
+```json
+{
+	"id": "msg_abc",
+	"channel_id": "dm_abc",
+	"content": "Hey!",
+	"sender": {},
+	"created_at": "2024-01-15T14:30:00.000Z",
+	"edited_at": null
+}
+```
+
+---
+
+### Send DM Message
+
+```
+POST /v1/channels/{channelId}/dm-messages
+```
+
+**Request body**:
+
+| Field     | Type   | Required | Description      |
+| --------- | ------ | -------- | ---------------- |
+| `content` | string | Yes      | Message content  |
+
+---
+
+### Leave DM Channel
+
+```
+DELETE /v1/channels/{channelId}/dm
+```
+
+Closes or leaves a DM channel by removing the current user as a participant.

@@ -9,30 +9,153 @@ The gateway supports three authentication methods depending on the type of clien
 
 ## User Authentication (Bearer JWT)
 
-Most endpoints require a Clerk-issued JWT passed as a Bearer token. This is the standard auth method for user-facing clients (web, mobile, desktop).
+Most endpoints require a JWT passed as a Bearer token. This is the standard auth method for user-facing clients (web, mobile, desktop).
 
 ```
-Authorization: Bearer <clerk_jwt>
+Authorization: Bearer <token>
 ```
 
-The JWT is validated on every request. If the user doesn't exist in the local database yet, they are automatically provisioned from Clerk on first request.
+The JWT is validated on every request.
 
 ### How it works
 
-1. Your client authenticates the user through Clerk (sign-in flow).
-2. Clerk issues a short-lived JWT.
-3. Attach the JWT to every API request in the `Authorization` header.
-4. The gateway validates the JWT, extracts the user ID, and processes the request.
+1. Register an account with `POST /v1/auth/register` or log in with `POST /v1/auth/login`.
+2. The server returns a session token (JWT).
+3. Attach the token to every API request in the `Authorization` header.
+4. The gateway validates the token and processes the request.
 
-### Token expiry
+---
 
-Clerk JWTs are short-lived (typically 60 seconds). Your client should refresh them automatically using the Clerk SDK. Expired tokens return `401 Unauthorized`.
+## Native Auth Endpoints
+
+### Register
+
+```
+POST /v1/auth/register
+```
+
+Creates a new account with email and password. Returns a session token.
+
+**Request body**:
+
+| Field      | Type   | Required | Description    |
+| ---------- | ------ | -------- | -------------- |
+| `username` | string | Yes      | Username       |
+| `email`    | string | Yes      | Email address  |
+| `password` | string | Yes      | User password  |
+
+### Login
+
+```
+POST /v1/auth/login
+```
+
+Authenticates with email and password. If MFA is enabled, returns `mfa_required: true` and a short-lived `mfa_token` instead of a session token.
+
+**Request body**:
+
+| Field      | Type   | Required | Description   |
+| ---------- | ------ | -------- | ------------- |
+| `email`    | string | Yes      | Email address |
+| `password` | string | Yes      | Password      |
+
+### Logout
+
+```
+POST /v1/auth/logout
+```
+
+### Social OAuth Login
+
+```
+GET /v1/auth/oauth/{provider}
+GET /v1/auth/oauth/{provider}/callback
+```
+
+`GET /v1/auth/oauth/{provider}` redirects to the provider's OAuth login page. The `redirect_uri` must match an origin in `OAUTH_ALLOWED_ORIGINS`.
+
+| Parameter      | Type   | Required | Description                        |
+| -------------- | ------ | -------- | ---------------------------------- |
+| `redirect_uri` | string | No       | URI to redirect to after auth      |
+
+On callback, the user is authenticated and a session is created.
+
+---
+
+## Multi-Factor Authentication (MFA)
+
+### MFA Status
+
+```
+GET /v1/auth/mfa/status
+```
+
+Returns whether MFA is enabled for the current user.
+
+### Setup MFA (TOTP)
+
+```
+POST /v1/auth/mfa/setup
+```
+
+Initiates the TOTP setup process. Returns a QR code / secret for authenticator apps.
+
+### Enable MFA
+
+```
+POST /v1/auth/mfa/enable
+```
+
+**Request body**:
+
+| Field  | Type   | Required | Description                             |
+| ------ | ------ | -------- | --------------------------------------- |
+| `code` | string | Yes      | TOTP code from authenticator to confirm |
+
+### Verify MFA
+
+```
+POST /v1/auth/mfa/verify
+```
+
+Completes login by verifying a TOTP code or backup code. Accepts the `mfa_token` returned by `POST /v1/auth/login`.
+
+**Request body**:
+
+| Field       | Type   | Required | Description                         |
+| ----------- | ------ | -------- | ----------------------------------- |
+| `mfa_token` | string | Yes      | Temporary MFA token from login step |
+| `code`      | string | Yes      | TOTP code from authenticator        |
+
+### Disable MFA
+
+```
+POST /v1/auth/mfa/disable
+```
+
+**Request body**:
+
+| Field      | Type   | Required | Description           |
+| ---------- | ------ | -------- | --------------------- |
+| `password` | string | Yes      | Current user password |
+
+### Regenerate Backup Codes
+
+```
+POST /v1/auth/mfa/backup-codes/regenerate
+```
+
+**Request body**:
+
+| Field  | Type   | Required | Description       |
+| ------ | ------ | -------- | ----------------- |
+| `code` | string | Yes      | Current TOTP code |
 
 ---
 
 ## Bot Authentication (Bot-Token)
 
-Bot applications use a static token for authentication. This is used for bot-specific operations like command registration and webhook callbacks.
+Bot applications use a static token for authentication.
 
 ```
 Bot-Token: <bot_token>
@@ -40,9 +163,9 @@ Bot-Token: <bot_token>
 
 ### Obtaining a bot token
 
-1. Create an application via `POST /applications`.
+1. Create an application via `POST /v1/applications`.
 2. The response includes a `token` field — **this is shown only once**. Store it securely.
-3. If you lose the token, generate a new one with `POST /applications/:botId/reset-token` (this invalidates the old token immediately).
+3. If you lose the token, generate a new one with `POST /v1/applications/{botId}/reset-token` (this invalidates the old token immediately).
 
 ### Token format
 
@@ -50,11 +173,11 @@ Bot tokens are 64-character lowercase hex strings (32 random bytes, hex-encoded)
 
 ### Which endpoints use Bot-Token?
 
-- `PUT /applications/:botId/commands` — Register commands
-- `POST /applications/:botId/guilds/:guildId/commands` — Guild-specific commands
-- `POST /webhooks/:webhookId/:webhookToken` — Interaction follow-up messages
-- `PATCH /webhooks/:webhookId/:webhookToken/messages/@original` — Edit original response
-- `DELETE /webhooks/:webhookId/:webhookToken/messages/@original` — Delete original response
+- `PUT /v1/applications/{botId}/commands` — Register global commands
+- `PUT /v1/applications/{botId}/guilds/{guildId}/commands` — Guild-specific commands
+- `POST /v1/webhooks/{webhookId}/{webhookToken}` — Interaction follow-up messages
+- `PATCH /v1/webhooks/{webhookId}/{webhookToken}/messages/@original` — Edit original response
+- `DELETE /v1/webhooks/{webhookId}/{webhookToken}/messages/@original` — Delete original response
 
 ---
 
@@ -68,7 +191,7 @@ Authorization: Bearer <oauth_access_token>
 
 OAuth2 access tokens follow the format: `olq_<64-char hex>`
 
-See the [OAuth2 guide](./oauth2.md) for the full authorization flow, scopes, and token management.
+See the [OAuth2 guide](./oauth2) for the full authorization flow, scopes, and token management.
 
 ---
 
@@ -78,12 +201,12 @@ The real-time gateway authenticates via the same Bearer JWT, passed in the `toke
 
 ```typescript
 const stream = client.identify({
-	token: "<clerk_jwt>",
+	token: "<jwt>",
 	intents: GatewayIntents.GUILDS | GatewayIntents.GUILD_MESSAGES,
 });
 ```
 
-Bots can also connect to the gateway by passing a `Bot-Token` header on the HTTP/2 request in addition to the JWT token.
+Bots can also connect to the gateway by passing a `Bot-Token` header on the HTTP/2 request.
 
 ---
 
